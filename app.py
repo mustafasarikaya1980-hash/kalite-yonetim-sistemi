@@ -6,7 +6,15 @@ from streamlit_gsheets import GSheetsConnection
 
 # TARAYICI SEKMESİ BAŞLIĞI VE SİMGE
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
-
+# TARAYICI OTOMATİK ÇEVİRİ ENGELİ (HATA ÖNLEYİCİ)
+st.markdown("""
+    <script>
+        document.documentElement.setAttribute('lang', 'tr');
+        document.documentElement.setAttribute('class', 'notranslate');
+        document.documentElement.setAttribute('translate', 'no');
+    </script>
+    <meta name="google" content="notranslate" />
+""", unsafe_allow_html=True)
 # Tarayıcı Otomatik Çeviri Engeli
 st.markdown("""
     <html lang="tr" class="notranslate" translate="no">
