@@ -3,8 +3,9 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import json
 
-# TARAYICI SEKMESİ BAŞLIĞI
+# TARAYICI SEKMESİ BAŞLIĞI VE SİMGE
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
 # Tarayıcı Otomatik Çeviri Engeli
@@ -16,12 +17,41 @@ st.markdown("""
     </html>
 """, unsafe_allow_html=True)
 
-# Veri ve Fotoğraf Depolama Klasörleri
+# Veri, Fotoğraf ve Ayar Dosyaları
 VERI_DOSYASI = "kalite_onetim_sistemi.csv"
+AYAR_DOSYASI = "sistem_ayarlari.json"
 FOTO_KLASORU = "yuklenen_fotograflar"
 
 if not os.path.exists(FOTO_KLASORU):
     os.makedirs(FOTO_KLASORU)
+
+# --- DINAMIK AYARLARI YÜKLE VE KAYDET ---
+VARSAYILAN_AYARLAR = {
+    "personeller": [
+        "YURDAL BULDU (CNC)",
+        "AHMET TİFTİK (MONTAJ-SON KONTROL)",
+        "ENES TÜKEL (GİRİŞ KALİTE)",
+        "YENİ PERSONEL (ROTOR STATOR)"
+    ],
+    "parcalar": [
+        "6\" ALT YATAK", "6\" ÜST YATAK", "7\" ALT YATAK", "7\" ÜST YATAK", 
+        "8\" ALT YATAK", "8\" ÜST YATAK", "10\" ALT YATAK", "10\" ÜST YATAK",
+        "6\" FLANŞ", "7\" FLANŞ", "8\" FLANŞ", "10\" FLANŞ"
+    ]
+}
+
+def ayarlari_yukle():
+    if os.path.exists(AYAR_DOSYASI):
+        try:
+            with open(AYAR_DOSYASI, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return VARSAYILAN_AYARLAR
+    return VARSAYILAN_AYARLAR
+
+def ayarlari_kaydet(ayarlar):
+    with open(AYAR_DOSYASI, "w", encoding="utf-8") as f:
+        json.dump(ayarlar, f, ensure_ascii=False, indent=4)
 
 def verileri_yukle():
     try:
@@ -72,7 +102,6 @@ def kaydet_ve_sifirla():
     uretim_miktari = st.session_state.key_uretim_miktari
     fotograf = st.session_state.get(f"foto_{st.session_state.foto_id}", None)
 
-    # Doğrulama Kontrolleri
     if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
         st.session_state.mesaj = ("warning", "⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         return
@@ -98,7 +127,7 @@ def kaydet_ve_sifirla():
     }
     veri_kaydet(kayit)
 
-    # FORMUN SIFIRLANMASI
+    # Formu Sıfırla
     st.session_state.key_personel = "-- Seçiniz --"
     st.session_state.key_parca = "-- Seçiniz --"
     st.session_state.key_ret_nedeni = "-- Seçiniz --"
@@ -113,14 +142,20 @@ def kaydet_ve_sifirla():
 # SAYFA İÇİ ANA BAŞLIK
 st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
 
-# Sekmeler: Saha Veri Girişi ve Yönetici Paneli
-sekme_saha, sekme_yonetici = st.tabs(["📱 SAHA VERİ GİRİŞİ", "📊 YÖNETİCİ PANELİ"])
+# Mevcut Ayarları Yükle
+güncel_ayarlar = ayarlari_yukle()
 
-# --- SAHA VERİ GİRİŞİ SEKMESİ ---
+# Sekmeler
+sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
+    "📱 SAHA VERİ GİRİŞİ", 
+    "📊 YÖNETİCİ PANELİ", 
+    "⚙️ YÖNETİM & AYARLAR"
+])
+
+# --- 1. SAHA VERİ GİRİŞİ SEKMESİ ---
 with sekme_saha:
     st.header("Kalite Kontrol Formu")
     
-    # Uyarı veya Başarı Mesajı Gösterimi
     if st.session_state.mesaj:
         m_tur, m_metin = st.session_state.mesaj
         if m_tur == "warning":
@@ -129,62 +164,36 @@ with sekme_saha:
             st.success(m_metin)
         st.session_state.mesaj = None
 
-    # 1. Kalite Personeli
-    personel_listesi = [
-        "-- Seçiniz --",
-        "YURDAL BULDU (CNC)",
-        "AHMET TİFTİK (MONTAJ-SON KONTROL)",
-        "ENES TÜKEL (GİRİŞ KALİTE)",
-        "YENİ PERSONEL (ROTOR STATOR)"
-    ]
+    # Dinamik Liste Yükleme
+    personel_listesi = ["-- Seçiniz --"] + güncel_ayarlar["personeller"]
     st.selectbox("Kalite Personeli", personel_listesi, key="key_personel")
     
-    # 2. Parça Seçimi
-    parcalar = [
-        "-- Seçiniz --",
-        "6\" ALT YATAK", "6\" ÜST YATAK", "7\" ALT YATAK", "7\" ÜST YATAK", 
-        "8\" ALT YATAK", "8\" ÜST YATAK", "10\" ALT YATAK", "10\" ÜST YATAK",
-        "6\" FLANŞ", "7\" FLANŞ", "8\" FLANŞ", "10\" FLANŞ"
-    ]
+    parcalar = ["-- Seçiniz --"] + güncel_ayarlar["parcalar"]
     st.selectbox("Parça Seçin", parcalar, key="key_parca")
     
-    # 3. Ret Nedeni
-    ret_nedenleri = [
-        "-- Seçiniz --",
-        "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"
-    ]
+    ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key="key_ret_nedeni")
     
-    # OPRT. HATASI SEÇİLDİĞİNDE AÇILAN ALT MENÜLER
     if ret_nedeni == "OPRT. HATASI":
         st.info("ℹ️ Operatör hatası seçildi. Lütfen operatör adını ve CNC'yi giriniz.")
         st.text_input("OPERATÖRÜN ADI", placeholder="Örn: MELİH ÇAKILLI", key="key_op_adi")
         st.text_input("CNC NO", placeholder="Örn: CNC5", key="key_cnc_no")
     
-    # 4. MANUEL RET AÇIKLAMASI
     st.text_input("RET AÇIKLAMASI (Manuel Detay Giriniz)", placeholder="Örn: ÖLÇÜ DÜŞÜK", key="key_aciklama")
-    
-    # 5. Sayısal Girişler
     st.number_input("RET ADEDİ", min_value=0, step=1, key="key_ret_miktari")
     st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key="key_uretim_miktari")
     
-    # 6. FOTOĞRAF YÜKLEME
     st.file_uploader("Hatalı Parça Fotoğrafı Ekle (İsteğe Bağlı)", type=["jpg", "jpeg", "png"], key=f"foto_{st.session_state.foto_id}")
-    
-    # KAYDET VE GÖNDER BUTONU
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
-# --- YÖNETİCİ PANELİ SEKMESİ ---
+# --- 2. YÖNETİCİ PANELİ SEKMESİ ---
 with sekme_yonetici:
     st.header("Anlık Kalite Takip Ekranı")
-    
     df = verileri_yukle()
     
     if not df.empty:
         secilen_parca = st.selectbox("Filtrele: Parça", ["GENEL"] + list(df["Parca"].unique()))
-        
         filtered_df = df if secilen_parca == "GENEL" else df[df["Parca"] == secilen_parca]
-        
         ret_kolonu = "RetMiktari" if "RetMiktari" in filtered_df.columns else "RedMiktari"
         
         toplam_ret = filtered_df[ret_kolonu].sum()
@@ -200,3 +209,54 @@ with sekme_yonetici:
         st.table(filtered_df.tail(10))
     else:
         st.info("Henüz sistemde kayıtlı veri bulunmuyor.")
+
+# --- 3. YÖNETİM & AYARLAR SEKMESİ (YENİ EKLENDİ) ---
+with sekme_ayarlar:
+    st.header("Arayüzden Personel ve Parça Yönetimi")
+    st.write("Buradan ekleyeceğiniz yeni personel ve parçalar anında form menülerine eklenecektir.")
+    
+    col_p1, col_p2 = st.columns(2)
+    
+    # Yeni Personel Ekleme
+    with col_p1:
+        st.subheader("👤 Yeni Personel Ekle")
+        yeni_personel = st.text_input("Personel Adı Soyadı (Görevi)", placeholder="Örn: HASAN KAYA (CNC)")
+        if st.button("Personel Ekle", use_container_width=True):
+            if yeni_personel.strip() != "":
+                if yeni_personel.strip() not in güncel_ayarlar["personeller"]:
+                    güncel_ayarlar["personeller"].append(yeni_personel.strip())
+                    ayarlari_kaydet(güncel_ayarlar)
+                    st.success(f"✅ '{yeni_personel}' personeli başarıyla eklendi!")
+                    st.rerun()
+                else:
+                    st.warning("Bu personel zaten listede mevcut!")
+            else:
+                st.warning("Lütfen geçerli bir isim giriniz.")
+                
+    # Yeni Parça Ekleme
+    with col_p2:
+        st.subheader("🧩 Yeni Parça Ekle")
+        yeni_parca = st.text_input("Parça Tanımı / Kodu", placeholder="Örn: 12\" ALT YATAK")
+        if st.button("Parça Ekle", use_container_width=True):
+            if yeni_parca.strip() != "":
+                if yeni_parca.strip() not in güncel_ayarlar["parcalar"]:
+                    güncel_ayarlar["parcalar"].append(yeni_parca.strip())
+                    ayarlari_kaydet(güncel_ayarlar)
+                    st.success(f"✅ '{yeni_parca}' parçası başarıyla eklendi!")
+                    st.rerun()
+                else:
+                    st.warning("Bu parça zaten listede mevcut!")
+            else:
+                st.warning("Lütfen geçerli bir parça tanımı giriniz.")
+
+    st.divider()
+    st.subheader("📋 Mevcut Tanımlı Listeler")
+    l_col1, l_col2 = st.columns(2)
+    with l_col1:
+        st.write("**Kayıtlı Personeller:**")
+        for p in güncel_ayarlar["personeller"]:
+            st.caption(f"• {p}")
+    with l_col2:
+        st.write("**Kayıtlı Parçalar:**")
+        for pr in güncel_ayarlar["parcalar"]:
+            st.caption(f"• {pr}")
