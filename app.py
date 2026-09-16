@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -111,7 +111,7 @@ def kaydet_ve_sifirla():
     st.session_state.mesaj = ("success", "✅ Veri başarıyla kaydedildi ve tüm form sıfırlandı!")
 
 # Başlık
-st.title("🏭 Döküm Kalite Kontrol Sistemi")
+st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
 
 # Sekmeler: Saha Veri Girişi ve Yönetici Paneli
 sekme_saha, sekme_yonetici = st.tabs(["📱 SAHA VERİ GİRİŞİ", "📊 YÖNETİCİ PANELİ"])
