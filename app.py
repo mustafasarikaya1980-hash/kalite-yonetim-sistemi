@@ -1,11 +1,11 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
 
-# Sayfa Konfigürasyonu (Mobil Uyumlu)
-st.set_page_config(page_title="Döküm Kalite Kontrol", layout="wide")
+# TARAYICI SEKMESİ BAŞLIĞI
+st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
 # Tarayıcı Otomatik Çeviri Engeli
 st.markdown("""
@@ -17,7 +17,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Veri ve Fotoğraf Depolama Klasörleri
-VERI_DOSYASI = "kalite_yönetim_sistemi.csv"
+VERI_DOSYASI = "kalite_onetim_sistemi.csv"
 FOTO_KLASORU = "yuklenen_fotograflar"
 
 if not os.path.exists(FOTO_KLASORU):
@@ -98,7 +98,7 @@ def kaydet_ve_sifirla():
     }
     veri_kaydet(kayit)
 
-    # FORMUN SIFIRLANMASI (Widgets çizilmeden önce yapıldığı için HATA VERMEZ)
+    # FORMUN SIFIRLANMASI
     st.session_state.key_personel = "-- Seçiniz --"
     st.session_state.key_parca = "-- Seçiniz --"
     st.session_state.key_ret_nedeni = "-- Seçiniz --"
@@ -107,11 +107,11 @@ def kaydet_ve_sifirla():
     st.session_state.key_aciklama = ""
     st.session_state.key_ret_miktari = 0
     st.session_state.key_uretim_miktari = 0
-    st.session_state.foto_id += 1  # Fotoğraf yükleme kutusunu sıfırlar
+    st.session_state.foto_id += 1
     st.session_state.mesaj = ("success", "✅ Veri başarıyla kaydedildi ve tüm form sıfırlandı!")
 
-# Başlık
-st.title("🏭 Döküm Kalite Kontrol Sistemi")
+# SAYFA İÇİ ANA BAŞLIK
+st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
 
 # Sekmeler: Saha Veri Girişi ve Yönetici Paneli
 sekme_saha, sekme_yonetici = st.tabs(["📱 SAHA VERİ GİRİŞİ", "📊 YÖNETİCİ PANELİ"])
@@ -171,7 +171,7 @@ with sekme_saha:
     # 6. FOTOĞRAF YÜKLEME
     st.file_uploader("Hatalı Parça Fotoğrafı Ekle (İsteğe Bağlı)", type=["jpg", "jpeg", "png"], key=f"foto_{st.session_state.foto_id}")
     
-    # KAYDET VE GÖNDER BUTONU (on_click parametresi sıfırlamayı güvenle yapar)
+    # KAYDET VE GÖNDER BUTONU
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
 # --- YÖNETİCİ PANELİ SEKMESİ ---
