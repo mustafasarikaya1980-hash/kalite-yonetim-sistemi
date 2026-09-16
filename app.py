@@ -2,8 +2,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import os
-import json
+from streamlit_gsheets import GSheetsConnection
 
 # TARAYICI SEKMESİ BAŞLIĞI VE SİMGE
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
@@ -17,15 +16,33 @@ st.markdown("""
     </html>
 """, unsafe_allow_html=True)
 
-# Veri, Fotoğraf ve Ayar Dosyaları
-VERI_DOSYASI = "kalite_onetim_sistemi.csv"
-AYAR_DOSYASI = "sistem_ayarlari.json"
-FOTO_KLASORU = "yuklenen_fotograflar"
+# ==============================================================================
+# 🔗 GOOGLE E-TABLO LINKI
+# ==============================================================================
+TABLO_LINKI = "https://docs.google.com/spreadsheets/d/1PHo0U3tXy1H7A__E0_Bn18jPZpDoHqSa77R9rr-40xM/edit?usp=sharing"
 
-if not os.path.exists(FOTO_KLASORU):
-    os.makedirs(FOTO_KLASORU)
+def verileri_yukle(conn):
+    try:
+        df = conn.read(spreadsheet=TABLO_LINKI, ttl=0)
+        return df
+    except Exception as e:
+        return pd.DataFrame()
 
-# --- DİNAMİK AYARLAR (GÜNCELLENMİŞ MALZEME TÜRLÜ PARÇA LİSTESİ) ---
+def veri_kaydet(conn, yeni_veri):
+    try:
+        df_mevcut = verileri_yukle(conn)
+        yeni_df = pd.DataFrame([yeni_veri])
+        df_guncel = pd.concat([df_mevcut, yeni_df], ignore_index=True)
+        conn.update(spreadsheet=TABLO_LINKI, data=df_guncel)
+        return True
+    except Exception as e:
+        st.error(f"E-Tabloya kaydedilirken hata oluştu: {e}")
+        return False
+
+# Google Sheets Bağlantısını Başlat
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# --- DİNAMİK LİSTELER ---
 VARSAYILAN_AYARLAR = {
     "personeller": [
         "YURDAL BULDU (CNC)",
@@ -34,57 +51,27 @@ VARSAYILAN_AYARLAR = {
         "YENİ PERSONEL (ROTOR STATOR)"
     ],
     "parcalar": [
-        # 6 İNÇ GRUBU
         '6" ALT YATAK (304)', '6" ALT YATAK (316)', '6" ALT YATAK (PİK)',
         '6" ÜST YATAK (304)', '6" ÜST YATAK (316)', '6" ÜST YATAK (PİK)',
         '6" FLANŞ (304)', '6" FLANŞ (316)', '6" FLANŞ (PİK)',
-        
-        # 7 İNÇ GRUBU
         '7" ALT YATAK (304)', '7" ALT YATAK (316)', '7" ALT YATAK (PİK)',
         '7" ÜST YATAK (304)', '7" ÜST YATAK (316)', '7" ÜST YATAK (PİK)',
         '7" FLANŞ (304)', '7" FLANŞ (316)', '7" FLANŞ (PİK)',
-        
-        # 8 İNÇ GRUBU
         '8" ALT YATAK (304)', '8" ALT YATAK (316)', '8" ALT YATAK (PİK)',
         '8" ÜST YATAK (304)', '8" ÜST YATAK (316)', '8" ÜST YATAK (PİK)',
         '8" FLANŞ (304)', '8" FLANŞ (316)', '8" FLANŞ (PİK)',
-        
-        # 10 İNÇ GRUBU
         '10" ALT YATAK (304)', '10" ALT YATAK (316)', '10" ALT YATAK (PİK)',
         '10" ÜST YATAK (304)', '10" ÜST YATAK (316)', '10" ÜST YATAK (PİK)',
         '10" FLANŞ (304)', '10" FLANŞ (316)', '10" FLANŞ (PİK)'
     ]
 }
 
-def ayarlari_yukle():
-    if os.path.exists(AYAR_DOSYASI):
-        try:
-            with open(AYAR_DOSYASI, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return VARSAYILAN_AYARLAR
-    return VARSAYILAN_AYARLAR
+if "ekstra_personeller" not in st.session_state:
+    st.session_state.ekstra_personeller = []
+if "ekstra_parcalar" not in st.session_state:
+    st.session_state.ekstra_parcalar = []
 
-def ayarlari_kaydet(ayarlar):
-    with open(AYAR_DOSYASI, "w", encoding="utf-8") as f:
-        json.dump(ayarlar, f, ensure_ascii=False, indent=4)
-
-def verileri_yukle():
-    try:
-        return pd.read_csv(VERI_DOSYASI, encoding="utf-8-sig")
-    except FileNotFoundError:
-        return pd.DataFrame(columns=[
-            "Tarih", "Personel", "Parca", "RetNedeni", 
-            "OperatorAdi", "CncNo", "RetAciklamasi", 
-            "RetMiktari", "UretimMiktari", "FotografYolu"
-        ])
-
-def veri_kaydet(yeni_veri):
-    df = verileri_yukle()
-    df = pd.concat([df, pd.DataFrame([yeni_veri])], ignore_index=True)
-    df.to_csv(VERI_DOSYASI, index=False, encoding="utf-8-sig")
-
-# --- SESSION STATE BAŞLANGIÇ DEĞERLERİ ---
+# --- SESSION STATE DEĞERLERİ ---
 if "key_personel" not in st.session_state:
     st.session_state.key_personel = "-- Seçiniz --"
 if "key_parca" not in st.session_state:
@@ -101,12 +88,9 @@ if "key_ret_miktari" not in st.session_state:
     st.session_state.key_ret_miktari = 0
 if "key_uretim_miktari" not in st.session_state:
     st.session_state.key_uretim_miktari = 0
-if "foto_id" not in st.session_state:
-    st.session_state.foto_id = 0
 if "mesaj" not in st.session_state:
     st.session_state.mesaj = None
 
-# --- BUTONA BASILDIĞINDA ÇALIŞACAK SIFIRLAMA VE KAYIT FONKSİYONU ---
 def kaydet_ve_sifirla():
     personel = st.session_state.key_personel
     parca = st.session_state.key_parca
@@ -116,59 +100,44 @@ def kaydet_ve_sifirla():
     aciklama = st.session_state.key_aciklama
     ret_miktari = st.session_state.key_ret_miktari
     uretim_miktari = st.session_state.key_uretim_miktari
-    fotograf = st.session_state.get(f"foto_{st.session_state.foto_id}", None)
 
     if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
         st.session_state.mesaj = ("warning", "⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         return
 
-    foto_yolu = ""
-    if fotograf is not None:
-        zaman_damgasi = datetime.now().strftime("%Y%m%d_%H%M%S")
-        foto_yolu = os.path.join(FOTO_KLASORU, f"{zaman_damgasi}_{fotograf.name}")
-        with open(foto_yolu, "wb") as f:
-            f.write(fotograf.getbuffer())
-
+    # E-Tablonuzdaki sütun isimleriyle birebir eşleşen kayıt verisi
     kayit = {
-        "Tarih": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Personel": personel,
-        "Parca": parca,
-        "RetNedeni": ret_nedeni,
-        "OperatorAdi": op_adi,
-        "CncNo": cnc_no,
-        "RetAciklamasi": aciklama,
-        "RetMiktari": ret_miktari,
-        "UretimMiktari": uretim_miktari,
-        "FotografYolu": foto_yolu
+        "1.SORU:TARİH": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "2.SORU:PERSONEL": personel,
+        "3.SORU: PARÇA": parca,
+        "4.SORU: RETNEDENİ": ret_nedeni,
+        "5.SORU: OPERATÖRADI": op_adi,
+        "6.SORU: CNCNO": cnc_no,
+        "7.SORU: RETAÇIKLAMASI": aciklama,
+        "8.SORU: RETMİKTARI": ret_miktari,
+        "9.SORU: ÜRETİMMİKTARI": uretim_miktari
     }
-    veri_kaydet(kayit)
+    
+    basarili = veri_kaydet(conn, kayit)
+    if basarili:
+        st.session_state.key_personel = "-- Seçiniz --"
+        st.session_state.key_parca = "-- Seçiniz --"
+        st.session_state.key_ret_nedeni = "-- Seçiniz --"
+        st.session_state.key_op_adi = ""
+        st.session_state.key_cnc_no = ""
+        st.session_state.key_aciklama = ""
+        st.session_state.key_ret_miktari = 0
+        st.session_state.key_uretim_miktari = 0
+        st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza doğrudan kaydedildi!")
 
-    # Formu Sıfırla
-    st.session_state.key_personel = "-- Seçiniz --"
-    st.session_state.key_parca = "-- Seçiniz --"
-    st.session_state.key_ret_nedeni = "-- Seçiniz --"
-    st.session_state.key_op_adi = ""
-    st.session_state.key_cnc_no = ""
-    st.session_state.key_aciklama = ""
-    st.session_state.key_ret_miktari = 0
-    st.session_state.key_uretim_miktari = 0
-    st.session_state.foto_id += 1
-    st.session_state.mesaj = ("success", "✅ Veri başarıyla kaydedildi ve tüm form sıfırlandı!")
-
-# SAYFA İÇİ ANA BAŞLIK
 st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
 
-# Mevcut Ayarları Yükle
-güncel_ayarlar = ayarlari_yukle()
-
-# Sekmeler
 sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ", 
     "📊 YÖNETİCİ PANELİ", 
     "⚙️ YÖNETİM & AYARLAR"
 ])
 
-# --- 1. SAHA VERİ GİRİŞİ SEKMESİ ---
 with sekme_saha:
     st.header("Kalite Kontrol Formu")
     
@@ -180,12 +149,11 @@ with sekme_saha:
             st.success(m_metin)
         st.session_state.mesaj = None
 
-    # Dinamik Liste Yükleme
-    personel_listesi = ["-- Seçiniz --"] + güncel_ayarlar["personeller"]
-    st.selectbox("Kalite Personeli", personel_listesi, key="key_personel")
+    tum_personeller = VARSAYILAN_AYARLAR["personeller"] + st.session_state.ekstra_personeller
+    st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
     
-    parcalar = ["-- Seçiniz --"] + güncel_ayarlar["parcalar"]
-    st.selectbox("Parça Seçin", parcalar, key="key_parca")
+    tum_parcalar = VARSAYILAN_AYARLAR["parcalar"] + st.session_state.ekstra_parcalar
+    st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
     
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key="key_ret_nedeni")
@@ -199,80 +167,35 @@ with sekme_saha:
     st.number_input("RET ADEDİ", min_value=0, step=1, key="key_ret_miktari")
     st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key="key_uretim_miktari")
     
-    st.file_uploader("Hatalı Parça Fotoğrafı Ekle (İsteğe Bağlı)", type=["jpg", "jpeg", "png"], key=f"foto_{st.session_state.foto_id}")
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
-# --- 2. YÖNETİCİ PANELİ SEKMESİ ---
 with sekme_yonetici:
-    st.header("Anlık Kalite Takip Ekranı")
-    df = verileri_yukle()
-    
+    st.header("Anlık Kalite Takip Ekranı (Canlı E-Tablo)")
+    if st.button("🔄 Verileri Yenile"):
+        st.rerun()
+        
+    df = verileri_yukle(conn)
     if not df.empty:
-        secilen_parca = st.selectbox("Filtrele: Parça", ["GENEL"] + list(df["Parca"].unique()))
-        filtered_df = df if secilen_parca == "GENEL" else df[df["Parca"] == secilen_parca]
-        ret_kolonu = "RetMiktari" if "RetMiktari" in filtered_df.columns else "RedMiktari"
-        
-        toplam_ret = filtered_df[ret_kolonu].sum()
-        toplam_uretim = filtered_df["UretimMiktari"].sum()
-        hata_orani = (toplam_ret / toplam_uretim * 100) if toplam_uretim > 0 else 0
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Toplam Ret", f"{toplam_ret} Adet")
-        col2.metric("Toplam Üretim", f"{toplam_uretim} Adet")
-        col3.metric("Hata Oranı", f"%{hata_orani:.2f}")
-        
-        st.subheader("Son Girilen Veriler")
-        st.table(filtered_df.tail(10))
+        st.dataframe(df, use_container_width=True)
     else:
-        st.info("Henüz sistemde kayıtlı veri bulunmuyor.")
+        st.info("Henüz tabloya kaydedilmiş veri bulunmuyor.")
 
-# --- 3. YÖNETİM & AYARLAR SEKMESİ ---
 with sekme_ayarlar:
-    st.header("Arayüzden Personel ve Parça Yönetimi")
-    st.write("Buradan ekleyeceğiniz yeni personel ve parçalar anında form menülerine eklenecektir.")
-    
+    st.header("Arayüzden Personel ve Parça Ekleme")
     col_p1, col_p2 = st.columns(2)
-    
-    # Yeni Personel Ekleme
     with col_p1:
         st.subheader("👤 Yeni Personel Ekle")
-        yeni_personel = st.text_input("Personel Adı Soyadı (Görevi)", placeholder="Örn: HASAN KAYA (CNC)")
-        if st.button("Personel Ekle", use_container_width=True):
-            if yeni_personel.strip() != "":
-                if yeni_personel.strip() not in güncel_ayarlar["personeller"]:
-                    güncel_ayarlar["personeller"].append(yeni_personel.strip())
-                    ayarlari_kaydet(güncel_ayarlar)
-                    st.success(f"✅ '{yeni_personel}' personeli başarıyla eklendi!")
-                    st.rerun()
-                else:
-                    st.warning("Bu personel zaten listede mevcut!")
-            else:
-                st.warning("Lütfen geçerli bir isim giriniz.")
-                
-    # Yeni Parça Ekleme
+        y_pers = st.text_input("Personel Adı Soyadı")
+        if st.button("Personel Ekle"):
+            if y_pers and y_pers not in st.session_state.ekstra_personeller:
+                st.session_state.ekstra_personeller.append(y_pers)
+                st.success(f"'{y_pers}' eklendi!")
+                st.rerun()
     with col_p2:
         st.subheader("🧩 Yeni Parça Ekle")
-        yeni_parca = st.text_input("Parça Tanımı / Kodu", placeholder='Örn: 12" ALT YATAK (304)')
-        if st.button("Parça Ekle", use_container_width=True):
-            if yeni_parca.strip() != "":
-                if yeni_parca.strip() not in güncel_ayarlar["parcalar"]:
-                    güncel_ayarlar["parcalar"].append(yeni_parca.strip())
-                    ayarlari_kaydet(güncel_ayarlar)
-                    st.success(f"✅ '{yeni_parca}' parçası başarıyla eklendi!")
-                    st.rerun()
-                else:
-                    st.warning("Bu parça zaten listede mevcut!")
-            else:
-                st.warning("Lütfen geçerli bir parça tanımı giriniz.")
-
-    st.divider()
-    st.subheader("📋 Mevcut Tanımlı Listeler")
-    l_col1, l_col2 = st.columns(2)
-    with l_col1:
-        st.write("**Kayıtlı Personeller:**")
-        for p in güncel_ayarlar["personeller"]:
-            st.caption(f"• {p}")
-    with l_col2:
-        st.write("**Kayıtlı Parçalar:**")
-        for pr in güncel_ayarlar["parcalar"]:
-            st.caption(f"• {pr}")
+        y_prc = st.text_input("Parça Adı")
+        if st.button("Parça Ekle"):
+            if y_prc and y_prc not in st.session_state.ekstra_parcalar:
+                st.session_state.ekstra_parcalar.append(y_prc)
+                st.success(f"'{y_prc}' eklendi!")
+                st.rerun()
