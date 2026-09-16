@@ -25,7 +25,7 @@ FOTO_KLASORU = "yuklenen_fotograflar"
 if not os.path.exists(FOTO_KLASORU):
     os.makedirs(FOTO_KLASORU)
 
-# --- DINAMIK AYARLARI YÜKLE VE KAYDET ---
+# --- DİNAMİK AYARLAR (GÜNCELLENMİŞ MALZEME TÜRLÜ PARÇA LİSTESİ) ---
 VARSAYILAN_AYARLAR = {
     "personeller": [
         "YURDAL BULDU (CNC)",
@@ -34,9 +34,25 @@ VARSAYILAN_AYARLAR = {
         "YENİ PERSONEL (ROTOR STATOR)"
     ],
     "parcalar": [
-        "6\" ALT YATAK", "6\" ÜST YATAK", "7\" ALT YATAK", "7\" ÜST YATAK", 
-        "8\" ALT YATAK", "8\" ÜST YATAK", "10\" ALT YATAK", "10\" ÜST YATAK",
-        "6\" FLANŞ", "7\" FLANŞ", "8\" FLANŞ", "10\" FLANŞ"
+        # 6 İNÇ GRUBU
+        '6" ALT YATAK (304)', '6" ALT YATAK (316)', '6" ALT YATAK (PİK)',
+        '6" ÜST YATAK (304)', '6" ÜST YATAK (316)', '6" ÜST YATAK (PİK)',
+        '6" FLANŞ (304)', '6" FLANŞ (316)', '6" FLANŞ (PİK)',
+        
+        # 7 İNÇ GRUBU
+        '7" ALT YATAK (304)', '7" ALT YATAK (316)', '7" ALT YATAK (PİK)',
+        '7" ÜST YATAK (304)', '7" ÜST YATAK (316)', '7" ÜST YATAK (PİK)',
+        '7" FLANŞ (304)', '7" FLANŞ (316)', '7" FLANŞ (PİK)',
+        
+        # 8 İNÇ GRUBU
+        '8" ALT YATAK (304)', '8" ALT YATAK (316)', '8" ALT YATAK (PİK)',
+        '8" ÜST YATAK (304)', '8" ÜST YATAK (316)', '8" ÜST YATAK (PİK)',
+        '8" FLANŞ (304)', '8" FLANŞ (316)', '8" FLANŞ (PİK)',
+        
+        # 10 İNÇ GRUBU
+        '10" ALT YATAK (304)', '10" ALT YATAK (316)', '10" ALT YATAK (PİK)',
+        '10" ÜST YATAK (304)', '10" ÜST YATAK (316)', '10" ÜST YATAK (PİK)',
+        '10" FLANŞ (304)', '10" FLANŞ (316)', '10" FLANŞ (PİK)'
     ]
 }
 
@@ -210,7 +226,7 @@ with sekme_yonetici:
     else:
         st.info("Henüz sistemde kayıtlı veri bulunmuyor.")
 
-# --- 3. YÖNETİM & AYARLAR SEKMESİ (YENİ EKLENDİ) ---
+# --- 3. YÖNETİM & AYARLAR SEKMESİ ---
 with sekme_ayarlar:
     st.header("Arayüzden Personel ve Parça Yönetimi")
     st.write("Buradan ekleyeceğiniz yeni personel ve parçalar anında form menülerine eklenecektir.")
@@ -236,7 +252,7 @@ with sekme_ayarlar:
     # Yeni Parça Ekleme
     with col_p2:
         st.subheader("🧩 Yeni Parça Ekle")
-        yeni_parca = st.text_input("Parça Tanımı / Kodu", placeholder="Örn: 12\" ALT YATAK")
+        yeni_parca = st.text_input("Parça Tanımı / Kodu", placeholder='Örn: 12" ALT YATAK (304)')
         if st.button("Parça Ekle", use_container_width=True):
             if yeni_parca.strip() != "":
                 if yeni_parca.strip() not in güncel_ayarlar["parcalar"]:
