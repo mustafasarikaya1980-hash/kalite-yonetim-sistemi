@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 import os
 
-# TARAYICI SEKMESİ BAŞLIĞI DÜZELTİLDİ
+# TARAYICI SEKMESİ BAŞLIĞI
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
 # Tarayıcı Otomatik Çeviri Engeli
@@ -110,7 +110,7 @@ def kaydet_ve_sifirla():
     st.session_state.foto_id += 1
     st.session_state.mesaj = ("success", "✅ Veri başarıyla kaydedildi ve tüm form sıfırlandı!")
 
-# Ana Başlık
+# SAYFA İÇİ ANA BAŞLIK
 st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
 
 # Sekmeler: Saha Veri Girişi ve Yönetici Paneli
