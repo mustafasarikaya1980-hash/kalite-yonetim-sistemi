@@ -42,6 +42,12 @@ ENTRY_ACIKLAMA = "entry.686625208"
 ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
 
+# Form ayarları e-posta adresi toplayacak şekilde kurulduğu için Google
+# otomatik bir "E-posta" sorusu ekledi. Bu, normal bir soru gibi "entry.xxx"
+# değil, özel "emailAddress" adıyla gönderilmesi gereken bir alan. Kullanıcıdan
+# gerçek bir e-posta istemiyoruz; sabit bir yer tutucu değer gönderiyoruz.
+SABIT_EPOSTA = "veri@msp-kalite.local"
+
 # Yanıtların düştüğü Google E-Tablonun herkese açık CSV linki
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"
@@ -72,6 +78,7 @@ def veri_kaydet(yeni_veri: dict):
         ENTRY_ACIKLAMA: yeni_veri["aciklama"],
         ENTRY_RET_MIKTARI: yeni_veri["ret_miktari"],
         ENTRY_URETIM_MIKTARI: yeni_veri["uretim_miktari"],
+        "emailAddress": SABIT_EPOSTA,
     }
     try:
         resp = requests.post(
