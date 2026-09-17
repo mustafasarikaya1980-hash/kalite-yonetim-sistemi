@@ -26,12 +26,16 @@ st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=Tr
 st.markdown(
     """
     <style>
-    /* Üst sekme çubuğunu sabitle — kaydırınca ekranın üstünde kalır */
-    div[data-testid="stTabs"] > div:first-child {
-        position: sticky;
-        top: 2.6rem;
+    /* Üst sekme çubuğunu sabitle — kaydırınca ekranın üstünde kalır.
+       Streamlit'in iç yapısı sürümden sürüme değişebildiği için birden
+       fazla olası hedefi aynı anda sabitliyoruz. */
+    div[data-testid="stTabs"],
+    div[data-testid="stTabs"] > div:first-child,
+    div[data-baseweb="tab-list"] {
+        position: sticky !important;
+        top: 0 !important;
         z-index: 999;
-        background-color: var(--background-color, #F8FAFC);
+        background-color: #F8FAFC;
         padding-top: 0.4rem;
         padding-bottom: 0.3rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
