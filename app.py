@@ -28,7 +28,7 @@ st.markdown(
     """
     <style>
     /* Üst sekme çubuğunu sabitle — kaydırınca ekranın üstünde kalır.
-       Streamlit'in iç yapısı sürümden sürüme değişebildiği için birden
+       Streamlit'in iç yapısı sürümden sürümden sürümden değişebildiği için birden
        fazla olası hedefi aynı anda sabitliyoruz. */
     div[data-testid="stTabs"],
     div[data-testid="stTabs"] > div:first-child,
@@ -91,10 +91,8 @@ ENTRY_ACIKLAMA = "entry.686625208"
 ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
 
-# YENİ: Belge/fotoğraf linklerinin yazılacağı soru.
-# Google Form'unuza "Belge Linkleri" adında "Kısa yanıt" tipinde yeni bir soru
-# ekleyin, sonra o sorunun entry.XXXXXXXXX kimliğini buraya yapıştırın.
-ENTRY_BELGE_LINKLERI = "entry.795755675"  # <-- BURAYI GERÇEK ID İLE DEĞİŞTİRİN
+# YENİ: Belge/fotoğraf linklerinin yazılacağı soru ID'si
+ENTRY_BELGE_LINKLERI = "entry.795755675"
 
 # --- Form 2: Yeni personel / parça ekleme (kalıcı, herkese ortak liste) ---
 FORM2_RESPONSE_URL = (
@@ -103,15 +101,9 @@ FORM2_RESPONSE_URL = (
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# Form ayarları e-posta adresi toplayacak şekilde kurulduğu için Google her iki
-# formda da otomatik bir "E-posta" sorusu ekledi. Bu, normal bir soru gibi
-# "entry.xxx" değil, özel "emailAddress" adıyla gönderilmesi gereken bir alan.
-# Kullanıcıdan gerçek bir e-posta istemiyoruz; sabit bir yer tutucu değer
-# gönderiyoruz.
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# Yanıtların düştüğü Google E-Tablo (her iki form da aynı dosyaya, farklı
-# sekmelere yazıyor)
+# Yanıtların düştüğü Google E-Tablo
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"          # Kalite kontrol kayıtları sekmesi
 SHEET2_GID = "1493441004"         # Yeni personel/parça kayıtları sekmesi
@@ -119,10 +111,8 @@ SHEET2_GID = "1493441004"         # Yeni personel/parça kayıtları sekmesi
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 
-# --- YENİ: Belge/fotoğraf yükleme için Google Apps Script Web App adresi ---
-# script.google.com'da oluşturup "Web app" olarak yayınladığınız (Deploy)
-# adresi buraya yapıştırın. ".../exec" ile bitmelidir.
-APPS_SCRIPT_URL = "BURAYA_APPS_SCRIPT_WEB_APP_URLNIZI_YAPISTIRIN"
+# --- Belge/fotoğraf yükleme için Google Apps Script Web App adresi ---
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDSe-a3leY9niI_S96Y158lqE-qZYCV5oj_6spIhkNcDZNGakMpNhaGGGu5qF0iS3-/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
@@ -141,8 +131,7 @@ def verileri_yukle():
 
 @st.cache_data(ttl=10, show_spinner=False)
 def ekstra_liste_yukle():
-    """Arayüzden eklenmiş yeni personel/parça isimlerini okur (tüm kullanıcılar
-    ve cihazlar için ortak, kalıcı liste)."""
+    """Arayüzden eklenmiş yeni personel/parça isimlerini okur."""
     try:
         df = pd.read_csv(CSV2_URL)
         df = df.dropna(how="all")
@@ -152,7 +141,6 @@ def ekstra_liste_yukle():
         deger = df["Değer"].astype(str).str.strip()
         personeller = deger[tip == "PERSONEL"].tolist()
         parcalar = deger[tip == "PARCA"].tolist()
-        # Tekilleştir, sırayı koru
         personeller = list(dict.fromkeys(p for p in personeller if p and p.lower() != "nan"))
         parcalar = list(dict.fromkeys(p for p in parcalar if p and p.lower() != "nan"))
         return personeller, parcalar
@@ -162,16 +150,12 @@ def ekstra_liste_yukle():
 
 def dosyalari_yukle(dosyalar):
     """Yüklenen dosyaları (fotoğraf/belge) Apps Script köprüsü üzerinden
-    Google Drive'a gönderir ve paylaşım linklerini döndürür.
-    Başarısız olursa None döner (kayıt işlemi iptal edilmeli)."""
+    Google Drive'a gönderir ve paylaşım linklerini döndürür."""
     if not dosyalar:
         return []
 
     if not APPS_SCRIPT_URL or "BURAYA" in APPS_SCRIPT_URL:
-        st.error(
-            "❌ Belge yükleme adresi (Apps Script URL) henüz ayarlanmadı. "
-            "Kod içindeki APPS_SCRIPT_URL değişkenini doldurun."
-        )
+        st.error("❌ Belge yükleme adresi (Apps Script URL) henüz ayarlanmadı.")
         return None
 
     payload_dosyalar = []
@@ -200,8 +184,7 @@ def dosyalari_yukle(dosyalar):
 
 
 def veri_kaydet(yeni_veri: dict) -> bool:
-    """Google Form'un formResponse adresine POST göndererek e-tabloya
-    yeni bir kalite kaydı düşürür. Servis hesabı / API anahtarı gerekmez."""
+    """Google Form'un formResponse adresine POST göndererek e-tabloya yeni kalite kaydı düşürür."""
     payload = {
         ENTRY_PERSONEL: yeni_veri["personel"],
         ENTRY_PARCA: yeni_veri["parca"],
@@ -217,7 +200,7 @@ def veri_kaydet(yeni_veri: dict) -> bool:
     try:
         resp = requests.post(FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
-            verileri_yukle.clear()  # önbelleği temizle ki yeni kayıt hemen görünsün
+            verileri_yukle.clear()
             return True
         st.error(f"❌ Google Form'a gönderilirken beklenmeyen bir yanıt alındı (kod: {resp.status_code}).")
         return False
@@ -227,8 +210,7 @@ def veri_kaydet(yeni_veri: dict) -> bool:
 
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
-    """Yeni bir personel/parça adını, ikinci Google Form üzerinden kalıcı ve
-    tüm kullanıcılar için ortak olacak şekilde kaydeder."""
+    """Yeni bir personel/parça adını ikinci Google Form üzerinden kaydeder."""
     payload = {
         ENTRY2_TIP: tip,
         ENTRY2_DEGER: deger,
@@ -246,11 +228,6 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         return False
 
 
-# Not: Personel ve parça listeleri artık kodda sabit değil — tamamen Google
-# E-Tablodaki "Form Yanıtları 3" sekmesinden okunuyor (bkz. ekstra_liste_yukle).
-# Listeyi eklemek/silmek/düzeltmek için doğrudan o sekmeyi düzenlemeniz yeterli,
-# kod değişikliği gerekmez.
-
 _varsayilanlar = {
     "key_personel": "-- Seçiniz --",
     "key_parca": "-- Seçiniz --",
@@ -263,7 +240,7 @@ _varsayilanlar = {
     "mesaj": None,
     "key_yeni_personel_ayarlar": "",
     "key_yeni_parca_ayarlar": "",
-    "uploader_versiyon": 0,  # file_uploader'ı sıfırlamak için kullanılan sayaç
+    "uploader_versiyon": 0,
 }
 for _k, _v in _varsayilanlar.items():
     if _k not in st.session_state:
@@ -289,13 +266,11 @@ def kaydet_ve_sifirla():
         op_adi = ""
         cnc_no = ""
 
-    # Yüklenen belgeleri al (dinamik anahtar, uploader_versiyon'a göre değişir)
     uploader_key = f"key_belgeler_{st.session_state.uploader_versiyon}"
     yuklenen_dosyalar = st.session_state.get(uploader_key, [])
 
     belge_linkleri = dosyalari_yukle(yuklenen_dosyalar)
     if belge_linkleri is None:
-        # Yükleme başarısız oldu — kaydı iptal et, kullanıcı tekrar denesin
         return
 
     kayit = {
@@ -320,7 +295,7 @@ def kaydet_ve_sifirla():
         st.session_state.key_aciklama = ""
         st.session_state.key_ret_miktari = 0
         st.session_state.key_uretim_miktari = 0
-        st.session_state.uploader_versiyon += 1  # file_uploader'ı sıfırlar
+        st.session_state.uploader_versiyon += 1
         belge_sayisi = len(belge_linkleri)
         ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
         st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza doğrudan kaydedildi!{ek_mesaj}")
@@ -399,7 +374,6 @@ with sekme_saha:
 
     st.text_input("RET AÇIKLAMASI (Manuel Detay Giriniz)", placeholder="Örn: ÖLÇÜ DÜŞÜK", key="key_aciklama")
 
-    # YENİ: Belge / fotoğraf ekleme alanı (birden fazla dosya seçilebilir)
     st.file_uploader(
         "📎 BELGE / FOTOĞRAF EKLE (Birden fazla dosya seçebilirsiniz)",
         type=["png", "jpg", "jpeg", "pdf"],
