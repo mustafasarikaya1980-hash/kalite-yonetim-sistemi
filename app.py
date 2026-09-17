@@ -147,29 +147,10 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         return False
 
 
-# --- SABİT (VARSAYILAN) LİSTELER ---
-VARSAYILAN_AYARLAR = {
-    "personeller": [
-        "YURDAL BULDU (CNC)",
-        "AHMET TİFTİK (MONTAJ-SON KONTROL)",
-        "ENES TÜKEL (GİRİŞ KALİTE)",
-        "YENİ PERSONEL (ROTOR STATOR)",
-    ],
-    "parcalar": [
-        '6" ALT YATAK (304)', '6" ALT YATAK (316)', '6" ALT YATAK (PİK)',
-        '6" ÜST YATAK (304)', '6" ÜST YATAK (316)', '6" ÜST YATAK (PİK)',
-        '6" FLANŞ (304)', '6" FLANŞ (316)', '6" FLANŞ (PİK)',
-        '7" ALT YATAK (304)', '7" ALT YATAK (316)', '7" ALT YATAK (PİK)',
-        '7" ÜST YATAK (304)', '7" ÜST YATAK (316)', '7" ÜST YATAK (PİK)',
-        '7" FLANŞ (304)', '7" FLANŞ (316)', '7" FLANŞ (PİK)',
-        '8" ALT YATAK (304)', '8" ALT YATAK (316)', '8" ALT YATAK (PİK)',
-        '8" ÜST YATAK (304)', '8" ÜST YATAK (316)', '8" ÜST YATAK (PİK)',
-        '8" FLANŞ (304)', '8" FLANŞ (316)', '8" FLANŞ (PİK)',
-        '10" ALT YATAK (304)', '10" ALT YATAK (316)', '10" ALT YATAK (PİK)',
-        '10" ÜST YATAK (304)', '10" ÜST YATAK (316)', '10" ÜST YATAK (PİK)',
-        '10" FLANŞ (304)', '10" FLANŞ (316)', '10" FLANŞ (PİK)',
-    ],
-}
+# Not: Personel ve parça listeleri artık kodda sabit değil — tamamen Google
+# E-Tablodaki "Form Yanıtları 3" sekmesinden okunuyor (bkz. ekstra_liste_yukle).
+# Listeyi eklemek/silmek/düzeltmek için doğrudan o sekmeyi düzenlemeniz yeterli,
+# kod değişikliği gerekmez.
 
 _varsayilanlar = {
     "key_personel": "-- Seçiniz --",
@@ -273,7 +254,7 @@ with sekme_saha:
             st.success(m_metin)
         st.session_state.mesaj = None
 
-    tum_personeller = VARSAYILAN_AYARLAR["personeller"] + ekstra_personeller
+    tum_personeller = ekstra_personeller
     col_pers, col_pers_ekle = st.columns([5, 1])
     with col_pers:
         st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
@@ -283,7 +264,7 @@ with sekme_saha:
             st.text_input("Yeni personel adı", key="key_yeni_personel")
             st.button("Kaydet", key="btn_personel_ekle_saha", on_click=personel_ekle, args=("key_yeni_personel",))
 
-    tum_parcalar = VARSAYILAN_AYARLAR["parcalar"] + ekstra_parcalar
+    tum_parcalar = ekstra_parcalar
     col_parca, col_parca_ekle = st.columns([5, 1])
     with col_parca:
         st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
@@ -311,6 +292,7 @@ with sekme_yonetici:
     st.header("Anlık Kalite Takip Ekranı (Canlı E-Tablo)")
     if st.button("🔄 Verileri Yenile"):
         verileri_yukle.clear()
+        ekstra_liste_yukle.clear()
         st.rerun()
 
     df = verileri_yukle()
@@ -325,6 +307,14 @@ with sekme_yonetici:
 with sekme_ayarlar:
     st.header("Personel ve Parça Listesini Yönet")
     st.caption("Buradan eklediğiniz isimler kalıcıdır ve tüm cihazlar/kullanıcılar için ortaktır.")
+    st.info(
+        "🗑️ Bir ismi **silmek** veya **düzeltmek** için buradan yapamazsınız (Google Form sadece "
+        "ekleme yapabilir) — bunun için doğrudan Google E-Tablodaki "
+        "[Form Yanıtları 3 sekmesini](https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/edit#gid={SHEET2_GID}) açın, ilgili satırı bulup hücreyi düzenleyin "
+        "ya da satırı silin. Değişiklik uygulamaya en geç 10 saniyede (veya 'Verileri Yenile'ye "
+        "basınca hemen) yansır."
+    )
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         st.subheader("👤 Yeni Personel Ekle")
