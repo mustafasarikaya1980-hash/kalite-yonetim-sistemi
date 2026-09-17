@@ -111,8 +111,8 @@ SHEET2_GID = "1493441004"         # Yeni personel/parça kayıtları sekmesi
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 
-# --- Belge/fotoğraf yükleme için Google Apps Script Web App adresi ---
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDSe-a3leY9niI_S96Y158lqE-qZYCV5oj_6spIhkNcDZNGakMpNhaGGGu5qF0iS3-/exec"
+# --- Belge/fotoğraf yükleme için Güncel Google Apps Script Web App adresi ---
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXfMCvGOt8B7sqRWmtpmZOpQPRgf_eiSLxsjucQCEJ-hntQkN/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
