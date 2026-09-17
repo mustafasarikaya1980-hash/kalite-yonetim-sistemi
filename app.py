@@ -1,34 +1,12 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime
 
-# ==============================================================================
-# GEREKLİ KÜTÜPHANE KONTROLÜ
-# En sık "hata veriyor" nedeni: streamlit-gsheets kütüphanesi kurulu değil
-# veya requirements.txt dosyasında eksik. Bu blok, eksikse anlaşılır bir
-# Türkçe uyarı gösterir (çıplak bir Python hata ekranı yerine).
-# ==============================================================================
-try:
-    from streamlit_gsheets import GSheetsConnection
-except ModuleNotFoundError:
-    st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
-    st.error(
-        "❌ 'streamlit-gsheets' kütüphanesi bulunamadı.\n\n"
-        "Çözüm: Proje klasörünüzde bir **requirements.txt** dosyası olduğundan emin olun ve "
-        "içine şu satırları ekleyin:\n\n"
-        "```\nstreamlit\nstreamlit-gsheets\npandas\n```\n\n"
-        "Yerelde çalıştırıyorsanız terminalde şunu çalıştırın:\n"
-        "`pip install streamlit-gsheets`"
-    )
-    st.stop()
-
-# TARAYICI SEKMESİ BAŞLIĞI VE SİMGE
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
 # TARAYICI OTOMATİK ÇEVİRİ ENGELİ (HATA ÖNLEYİCİ)
-# Not: st.markdown içindeki <script> etiketleri Streamlit tarafından güvenlik
-# nedeniyle çalıştırılmaz. Gerçek etkisi olması için st.components.v1.html kullanılır.
 st.components.v1.html(
     """
     <script>
@@ -45,78 +23,72 @@ st.components.v1.html(
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
 # ==============================================================================
-# 🔗 GOOGLE E-TABLO LINKI
+# 🔗 GOOGLE FORM (YAZMA) VE GOOGLE E-TABLO (OKUMA) AYARLARI
+# Servis hesabı / secrets.toml / API anahtarı GEREKMİYOR — kayıt, sizin
+# oluşturduğunuz Google Form'a arka planda gönderilir; okuma ise tablonun
+# herkese açık CSV linki üzerinden yapılır.
 # ==============================================================================
-TABLO_LINKI = "https://docs.google.com/spreadsheets/d/1PHo0U3tXy1H7A__E0_Bn18jPZpDoHqSa77R9rr-40xM/edit?usp=sharing"
+FORM_RESPONSE_URL = (
+    "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
+)
 
-# Google Sheets'e kaydedilecek/okunacak sütun isimleri (tek yerden yönetilir)
-SUTUNLAR = [
-    "1.SORU:TARİH",
-    "2.SORU:PERSONEL",
-    "3.SORU: PARÇA",
-    "4.SORU: RETNEDENİ",
-    "5.SORU: OPERATÖRADI",
-    "6.SORU: CNCNO",
-    "7.SORU: RETAÇIKLAMASI",
-    "8.SORU: RETMİKTARI",
-    "9.SORU: ÜRETİMMİKTARI",
-]
+# Google Form sorularının entry kodları (Form'daki soru sırasıyla birebir eşleşir)
+ENTRY_PERSONEL = "entry.1505600207"
+ENTRY_PARCA = "entry.1034697779"
+ENTRY_RET_NEDENI = "entry.1351128780"
+ENTRY_OP_ADI = "entry.108790685"
+ENTRY_CNC_NO = "entry.657669024"
+ENTRY_ACIKLAMA = "entry.686625208"
+ENTRY_RET_MIKTARI = "entry.410490317"
+ENTRY_URETIM_MIKTARI = "entry.958612329"
+
+# Yanıtların düştüğü Google E-Tablonun herkese açık CSV linki
+SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
+SHEET_GID = "1834241278"
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 
 
-@st.cache_resource(show_spinner=False)
-def baglanti_kur():
-    """Google Sheets bağlantısını bir kez kurar; secrets.toml eksik/bozuksa
-    anlaşılır bir hata mesajı gösterir."""
+@st.cache_data(ttl=10, show_spinner=False)
+def verileri_yukle():
+    """Google E-Tablodaki yanıtları herkese açık CSV linkinden okur."""
     try:
-        return st.connection("gsheets", type=GSheetsConnection)
-    except Exception as e:
-        st.error(
-            "❌ Google E-Tablo bağlantısı kurulamadı.\n\n"
-            "**En sık nedenler:**\n\n"
-            "1. `.streamlit/secrets.toml` dosyanız yok veya yanlış konumda "
-            "(Streamlit Cloud'da: App Settings → Secrets bölümüne eklenmeli).\n"
-            "2. secrets.toml içindeki `[connections.gsheets]` bloğu eksik/hatalı "
-            "(service account JSON anahtarınızdaki alanlarla birebir eşleşmeli).\n"
-            "3. Google Cloud projesinde **Google Sheets API** etkin değil.\n\n"
-            f"Teknik detay: `{e}`"
-        )
-        st.stop()
-
-
-def verileri_yukle(conn):
-    try:
-        df = conn.read(spreadsheet=TABLO_LINKI, ttl=0)
-        # Tamamen boş satırları (Google Sheets'in bazen eklediği) at
+        df = pd.read_csv(CSV_URL)
         df = df.dropna(how="all")
         return df
     except Exception as e:
         st.session_state["_son_okuma_hatasi"] = str(e)
-        return pd.DataFrame(columns=SUTUNLAR)
+        return pd.DataFrame()
 
 
-def veri_kaydet(conn, yeni_veri):
+def veri_kaydet(yeni_veri: dict):
+    """Google Form'un formResponse adresine POST göndererek e-tabloya
+    yeni bir satır düşürür. Servis hesabı / API anahtarı gerekmez."""
+    payload = {
+        ENTRY_PERSONEL: yeni_veri["personel"],
+        ENTRY_PARCA: yeni_veri["parca"],
+        ENTRY_RET_NEDENI: yeni_veri["ret_nedeni"],
+        ENTRY_OP_ADI: yeni_veri["op_adi"],
+        ENTRY_CNC_NO: yeni_veri["cnc_no"],
+        ENTRY_ACIKLAMA: yeni_veri["aciklama"],
+        ENTRY_RET_MIKTARI: yeni_veri["ret_miktari"],
+        ENTRY_URETIM_MIKTARI: yeni_veri["uretim_miktari"],
+    }
     try:
-        df_mevcut = verileri_yukle(conn)
-        yeni_df = pd.DataFrame([yeni_veri])
-        df_guncel = pd.concat([df_mevcut, yeni_df], ignore_index=True)
-        conn.update(spreadsheet=TABLO_LINKI, data=df_guncel)
-        # Google E-Tabloya yazılan veriyi tekrar okuyup önbelleği tazele
-        verileri_yukle(conn)
-        return True
+        resp = requests.post(
+            FORM_RESPONSE_URL,
+            data=payload,
+            headers={"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"},
+            timeout=15,
+        )
+        if resp.status_code in (200, 302):
+            verileri_yukle.clear()  # önbelleği temizle ki yeni kayıt hemen görünsün
+            return True
+        st.error(f"❌ Google Form'a gönderilirken beklenmeyen bir yanıt alındı (kod: {resp.status_code}).")
+        return False
     except Exception as e:
-        mesaj = str(e)
-        ipucu = ""
-        if "PERMISSION" in mesaj.upper() or "403" in mesaj:
-            ipucu = (
-                "\n\n💡 İpucu: Servis hesabınızın (secrets.toml içindeki `client_email`) "
-                "Google E-Tabloya **Düzenleyen (Editor)** olarak eklendiğinden emin olun. "
-                "Sadece 'Görüntüleyen' yetkisiyle paylaşılan tablolara yazma işlemi başarısız olur."
-            )
-        st.error(f"❌ E-Tabloya kaydedilirken hata oluştu: {mesaj}{ipucu}")
+        st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
-
-conn = baglanti_kur()
 
 # --- DİNAMİK LİSTELER ---
 VARSAYILAN_AYARLAR = {
@@ -147,7 +119,6 @@ if "ekstra_personeller" not in st.session_state:
 if "ekstra_parcalar" not in st.session_state:
     st.session_state.ekstra_parcalar = []
 
-# --- SESSION STATE DEĞERLERİ ---
 _varsayilanlar = {
     "key_personel": "-- Seçiniz --",
     "key_parca": "-- Seçiniz --",
@@ -178,8 +149,6 @@ def kaydet_ve_sifirla():
         st.session_state.mesaj = ("warning", "⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         return
 
-    # Operatör hatası seçili değilse operatör/CNC alanlarını boş kaydet
-    # (eski girilen değerlerin yanlışlıkla başka kayıtlara taşınmasını önler)
     if ret_nedeni == "OPRT. HATASI":
         op_adi = st.session_state.get("key_op_adi", "")
         cnc_no = st.session_state.get("key_cnc_no", "")
@@ -187,20 +156,18 @@ def kaydet_ve_sifirla():
         op_adi = ""
         cnc_no = ""
 
-    # E-Tablonuzdaki sütun isimleriyle birebir eşleşen kayıt verisi
     kayit = {
-        "1.SORU:TARİH": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "2.SORU:PERSONEL": personel,
-        "3.SORU: PARÇA": parca,
-        "4.SORU: RETNEDENİ": ret_nedeni,
-        "5.SORU: OPERATÖRADI": op_adi,
-        "6.SORU: CNCNO": cnc_no,
-        "7.SORU: RETAÇIKLAMASI": aciklama,
-        "8.SORU: RETMİKTARI": ret_miktari,
-        "9.SORU: ÜRETİMMİKTARI": uretim_miktari,
+        "personel": personel,
+        "parca": parca,
+        "ret_nedeni": ret_nedeni,
+        "op_adi": op_adi,
+        "cnc_no": cnc_no,
+        "aciklama": aciklama,
+        "ret_miktari": ret_miktari,
+        "uretim_miktari": uretim_miktari,
     }
 
-    basarili = veri_kaydet(conn, kayit)
+    basarili = veri_kaydet(kayit)
     if basarili:
         st.session_state.key_personel = "-- Seçiniz --"
         st.session_state.key_parca = "-- Seçiniz --"
@@ -271,9 +238,10 @@ with sekme_saha:
 with sekme_yonetici:
     st.header("Anlık Kalite Takip Ekranı (Canlı E-Tablo)")
     if st.button("🔄 Verileri Yenile"):
+        verileri_yukle.clear()
         st.rerun()
 
-    df = verileri_yukle(conn)
+    df = verileri_yukle()
     if not df.empty:
         st.dataframe(df, use_container_width=True)
     else:
