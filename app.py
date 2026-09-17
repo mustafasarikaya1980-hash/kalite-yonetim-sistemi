@@ -28,11 +28,11 @@ st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=Tr
 # oluşturduğunuz Google Form'a arka planda gönderilir; okuma ise tablonun
 # herkese açık CSV linki üzerinden yapılır.
 # ==============================================================================
+
+# --- Form 1: Kalite kontrol kayıtları ---
 FORM_RESPONSE_URL = (
     "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
 )
-
-# Google Form sorularının entry kodları (Form'daki soru sırasıyla birebir eşleşir)
 ENTRY_PERSONEL = "entry.1505600207"
 ENTRY_PARCA = "entry.1034697779"
 ENTRY_RET_NEDENI = "entry.1351128780"
@@ -42,21 +42,35 @@ ENTRY_ACIKLAMA = "entry.686625208"
 ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
 
-# Form ayarları e-posta adresi toplayacak şekilde kurulduğu için Google
-# otomatik bir "E-posta" sorusu ekledi. Bu, normal bir soru gibi "entry.xxx"
-# değil, özel "emailAddress" adıyla gönderilmesi gereken bir alan. Kullanıcıdan
-# gerçek bir e-posta istemiyoruz; sabit bir yer tutucu değer gönderiyoruz.
+# --- Form 2: Yeni personel / parça ekleme (kalıcı, herkese ortak liste) ---
+FORM2_RESPONSE_URL = (
+    "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT_EMRb_NHZsbcpMk-ZZmu0sQflfC_tt_A/formResponse"
+)
+ENTRY2_TIP = "entry.1056493377"
+ENTRY2_DEGER = "entry.1752462997"
+
+# Form ayarları e-posta adresi toplayacak şekilde kurulduğu için Google her iki
+# formda da otomatik bir "E-posta" sorusu ekledi. Bu, normal bir soru gibi
+# "entry.xxx" değil, özel "emailAddress" adıyla gönderilmesi gereken bir alan.
+# Kullanıcıdan gerçek bir e-posta istemiyoruz; sabit bir yer tutucu değer
+# gönderiyoruz.
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# Yanıtların düştüğü Google E-Tablonun herkese açık CSV linki
+# Yanıtların düştüğü Google E-Tablo (her iki form da aynı dosyaya, farklı
+# sekmelere yazıyor)
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GID = "1834241278"
+SHEET_GID = "1834241278"          # Kalite kontrol kayıtları sekmesi
+SHEET2_GID = "1493441004"         # Yeni personel/parça kayıtları sekmesi
+
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
+CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
+
+_HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
 
 @st.cache_data(ttl=10, show_spinner=False)
 def verileri_yukle():
-    """Google E-Tablodaki yanıtları herkese açık CSV linkinden okur."""
+    """Google E-Tablodaki kalite kayıtlarını herkese açık CSV linkinden okur."""
     try:
         df = pd.read_csv(CSV_URL)
         df = df.dropna(how="all")
@@ -66,9 +80,30 @@ def verileri_yukle():
         return pd.DataFrame()
 
 
-def veri_kaydet(yeni_veri: dict):
+@st.cache_data(ttl=10, show_spinner=False)
+def ekstra_liste_yukle():
+    """Arayüzden eklenmiş yeni personel/parça isimlerini okur (tüm kullanıcılar
+    ve cihazlar için ortak, kalıcı liste)."""
+    try:
+        df = pd.read_csv(CSV2_URL)
+        df = df.dropna(how="all")
+        if df.empty or "Tip" not in df.columns or "Değer" not in df.columns:
+            return [], []
+        tip = df["Tip"].astype(str).str.strip().str.upper()
+        deger = df["Değer"].astype(str).str.strip()
+        personeller = deger[tip == "PERSONEL"].tolist()
+        parcalar = deger[tip == "PARCA"].tolist()
+        # Tekilleştir, sırayı koru
+        personeller = list(dict.fromkeys(p for p in personeller if p and p.lower() != "nan"))
+        parcalar = list(dict.fromkeys(p for p in parcalar if p and p.lower() != "nan"))
+        return personeller, parcalar
+    except Exception:
+        return [], []
+
+
+def veri_kaydet(yeni_veri: dict) -> bool:
     """Google Form'un formResponse adresine POST göndererek e-tabloya
-    yeni bir satır düşürür. Servis hesabı / API anahtarı gerekmez."""
+    yeni bir kalite kaydı düşürür. Servis hesabı / API anahtarı gerekmez."""
     payload = {
         ENTRY_PERSONEL: yeni_veri["personel"],
         ENTRY_PARCA: yeni_veri["parca"],
@@ -81,12 +116,7 @@ def veri_kaydet(yeni_veri: dict):
         "emailAddress": SABIT_EPOSTA,
     }
     try:
-        resp = requests.post(
-            FORM_RESPONSE_URL,
-            data=payload,
-            headers={"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"},
-            timeout=15,
-        )
+        resp = requests.post(FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
             verileri_yukle.clear()  # önbelleği temizle ki yeni kayıt hemen görünsün
             return True
@@ -97,7 +127,27 @@ def veri_kaydet(yeni_veri: dict):
         return False
 
 
-# --- DİNAMİK LİSTELER ---
+def kalici_liste_ekle(tip: str, deger: str) -> bool:
+    """Yeni bir personel/parça adını, ikinci Google Form üzerinden kalıcı ve
+    tüm kullanıcılar için ortak olacak şekilde kaydeder."""
+    payload = {
+        ENTRY2_TIP: tip,
+        ENTRY2_DEGER: deger,
+        "emailAddress": SABIT_EPOSTA,
+    }
+    try:
+        resp = requests.post(FORM2_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
+        if resp.status_code in (200, 302):
+            ekstra_liste_yukle.clear()
+            return True
+        st.error(f"❌ Kaydedilirken beklenmeyen bir yanıt alındı (kod: {resp.status_code}).")
+        return False
+    except Exception as e:
+        st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
+        return False
+
+
+# --- SABİT (VARSAYILAN) LİSTELER ---
 VARSAYILAN_AYARLAR = {
     "personeller": [
         "YURDAL BULDU (CNC)",
@@ -121,11 +171,6 @@ VARSAYILAN_AYARLAR = {
     ],
 }
 
-if "ekstra_personeller" not in st.session_state:
-    st.session_state.ekstra_personeller = []
-if "ekstra_parcalar" not in st.session_state:
-    st.session_state.ekstra_parcalar = []
-
 _varsayilanlar = {
     "key_personel": "-- Seçiniz --",
     "key_parca": "-- Seçiniz --",
@@ -138,6 +183,8 @@ _varsayilanlar = {
     "mesaj": None,
     "key_yeni_personel": "",
     "key_yeni_parca": "",
+    "key_yeni_personel_ayarlar": "",
+    "key_yeni_parca_ayarlar": "",
 }
 for _k, _v in _varsayilanlar.items():
     if _k not in st.session_state:
@@ -187,20 +234,22 @@ def kaydet_ve_sifirla():
         st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza doğrudan kaydedildi!")
 
 
-def personel_ekle():
-    yeni = st.session_state.key_yeni_personel.strip()
-    if yeni and yeni not in st.session_state.ekstra_personeller:
-        st.session_state.ekstra_personeller.append(yeni)
-        st.session_state.key_yeni_personel = ""
-        st.session_state.mesaj = ("success", f"✅ '{yeni}' personel listesine eklendi!")
+def personel_ekle(kaynak_key: str):
+    yeni = st.session_state[kaynak_key].strip()
+    if not yeni:
+        return
+    if kalici_liste_ekle("PERSONEL", yeni):
+        st.session_state[kaynak_key] = ""
+        st.session_state.mesaj = ("success", f"✅ '{yeni}' personel listesine kalıcı olarak eklendi!")
 
 
-def parca_ekle():
-    yeni = st.session_state.key_yeni_parca.strip()
-    if yeni and yeni not in st.session_state.ekstra_parcalar:
-        st.session_state.ekstra_parcalar.append(yeni)
-        st.session_state.key_yeni_parca = ""
-        st.session_state.mesaj = ("success", f"✅ '{yeni}' parça listesine eklendi!")
+def parca_ekle(kaynak_key: str):
+    yeni = st.session_state[kaynak_key].strip()
+    if not yeni:
+        return
+    if kalici_liste_ekle("PARCA", yeni):
+        st.session_state[kaynak_key] = ""
+        st.session_state.mesaj = ("success", f"✅ '{yeni}' parça listesine kalıcı olarak eklendi!")
 
 
 st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
@@ -210,6 +259,8 @@ sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📊 YÖNETİCİ PANELİ",
     "⚙️ YÖNETİM & AYARLAR",
 ])
+
+ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
 with sekme_saha:
     st.header("Kalite Kontrol Formu")
@@ -222,11 +273,25 @@ with sekme_saha:
             st.success(m_metin)
         st.session_state.mesaj = None
 
-    tum_personeller = VARSAYILAN_AYARLAR["personeller"] + st.session_state.ekstra_personeller
-    st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
+    tum_personeller = VARSAYILAN_AYARLAR["personeller"] + ekstra_personeller
+    col_pers, col_pers_ekle = st.columns([5, 1])
+    with col_pers:
+        st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
+    with col_pers_ekle:
+        st.write("")  # etiketle hizalamak için boşluk
+        with st.popover("➕ Ekle", use_container_width=True):
+            st.text_input("Yeni personel adı", key="key_yeni_personel")
+            st.button("Kaydet", key="btn_personel_ekle_saha", on_click=personel_ekle, args=("key_yeni_personel",))
 
-    tum_parcalar = VARSAYILAN_AYARLAR["parcalar"] + st.session_state.ekstra_parcalar
-    st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
+    tum_parcalar = VARSAYILAN_AYARLAR["parcalar"] + ekstra_parcalar
+    col_parca, col_parca_ekle = st.columns([5, 1])
+    with col_parca:
+        st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
+    with col_parca_ekle:
+        st.write("")
+        with st.popover("➕ Ekle", use_container_width=True):
+            st.text_input("Yeni parça adı", key="key_yeni_parca")
+            st.button("Kaydet", key="btn_parca_ekle_saha", on_click=parca_ekle, args=("key_yeni_parca",))
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key="key_ret_nedeni")
@@ -258,13 +323,28 @@ with sekme_yonetici:
                 st.code(st.session_state["_son_okuma_hatasi"])
 
 with sekme_ayarlar:
-    st.header("Arayüzden Personel ve Parça Ekleme")
+    st.header("Personel ve Parça Listesini Yönet")
+    st.caption("Buradan eklediğiniz isimler kalıcıdır ve tüm cihazlar/kullanıcılar için ortaktır.")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         st.subheader("👤 Yeni Personel Ekle")
-        st.text_input("Personel Adı Soyadı", key="key_yeni_personel")
-        st.button("Personel Ekle", on_click=personel_ekle)
+        st.text_input("Personel Adı Soyadı", key="key_yeni_personel_ayarlar")
+        st.button(
+            "Personel Ekle",
+            key="btn_personel_ekle_ayarlar",
+            on_click=personel_ekle,
+            args=("key_yeni_personel_ayarlar",),
+        )
+        if ekstra_personeller:
+            st.caption("Şu ana kadar eklenenler: " + ", ".join(ekstra_personeller))
     with col_p2:
         st.subheader("🧩 Yeni Parça Ekle")
-        st.text_input("Parça Adı", key="key_yeni_parca")
-        st.button("Parça Ekle", on_click=parca_ekle)
+        st.text_input("Parça Adı", key="key_yeni_parca_ayarlar")
+        st.button(
+            "Parça Ekle",
+            key="btn_parca_ekle_ayarlar",
+            on_click=parca_ekle,
+            args=("key_yeni_parca_ayarlar",),
+        )
+        if ekstra_parcalar:
+            st.caption("Şu ana kadar eklenenler: " + ", ".join(ekstra_parcalar))
