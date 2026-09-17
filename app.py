@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import base64
 import streamlit as st
 import pandas as pd
 import requests
@@ -90,6 +91,11 @@ ENTRY_ACIKLAMA = "entry.686625208"
 ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
 
+# YENİ: Belge/fotoğraf linklerinin yazılacağı soru.
+# Google Form'unuza "Belge Linkleri" adında "Kısa yanıt" tipinde yeni bir soru
+# ekleyin, sonra o sorunun entry.XXXXXXXXX kimliğini buraya yapıştırın.
+ENTRY_BELGE_LINKLERI = "entry.795755675"  # <-- BURAYI GERÇEK ID İLE DEĞİŞTİRİN
+
 # --- Form 2: Yeni personel / parça ekleme (kalıcı, herkese ortak liste) ---
 FORM2_RESPONSE_URL = (
     "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT_EMRb_NHZsbcpMk-ZZmu0sQflfC_tt_A/formResponse"
@@ -112,6 +118,11 @@ SHEET2_GID = "1493441004"         # Yeni personel/parça kayıtları sekmesi
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
+
+# --- YENİ: Belge/fotoğraf yükleme için Google Apps Script Web App adresi ---
+# script.google.com'da oluşturup "Web app" olarak yayınladığınız (Deploy)
+# adresi buraya yapıştırın. ".../exec" ile bitmelidir.
+APPS_SCRIPT_URL = "BURAYA_APPS_SCRIPT_WEB_APP_URLNIZI_YAPISTIRIN"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
@@ -149,6 +160,45 @@ def ekstra_liste_yukle():
         return [], []
 
 
+def dosyalari_yukle(dosyalar):
+    """Yüklenen dosyaları (fotoğraf/belge) Apps Script köprüsü üzerinden
+    Google Drive'a gönderir ve paylaşım linklerini döndürür.
+    Başarısız olursa None döner (kayıt işlemi iptal edilmeli)."""
+    if not dosyalar:
+        return []
+
+    if not APPS_SCRIPT_URL or "BURAYA" in APPS_SCRIPT_URL:
+        st.error(
+            "❌ Belge yükleme adresi (Apps Script URL) henüz ayarlanmadı. "
+            "Kod içindeki APPS_SCRIPT_URL değişkenini doldurun."
+        )
+        return None
+
+    payload_dosyalar = []
+    for f in dosyalar:
+        icerik = f.getvalue()
+        payload_dosyalar.append(
+            {
+                "name": f.name,
+                "mimeType": f.type or "application/octet-stream",
+                "data": base64.b64encode(icerik).decode("utf-8"),
+            }
+        )
+
+    try:
+        resp = requests.post(
+            APPS_SCRIPT_URL, json={"files": payload_dosyalar}, headers=_HEADERS, timeout=60
+        )
+        sonuc = resp.json()
+        if sonuc.get("success"):
+            return sonuc.get("links", [])
+        st.error(f"❌ Belgeler yüklenirken hata oluştu: {sonuc.get('error', 'Bilinmeyen hata')}")
+        return None
+    except Exception as e:
+        st.error(f"❌ Belgeler yüklenirken bağlantı hatası oluştu: {e}")
+        return None
+
+
 def veri_kaydet(yeni_veri: dict) -> bool:
     """Google Form'un formResponse adresine POST göndererek e-tabloya
     yeni bir kalite kaydı düşürür. Servis hesabı / API anahtarı gerekmez."""
@@ -161,6 +211,7 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         ENTRY_ACIKLAMA: yeni_veri["aciklama"],
         ENTRY_RET_MIKTARI: yeni_veri["ret_miktari"],
         ENTRY_URETIM_MIKTARI: yeni_veri["uretim_miktari"],
+        ENTRY_BELGE_LINKLERI: yeni_veri.get("belge_linkleri", ""),
         "emailAddress": SABIT_EPOSTA,
     }
     try:
@@ -212,6 +263,7 @@ _varsayilanlar = {
     "mesaj": None,
     "key_yeni_personel_ayarlar": "",
     "key_yeni_parca_ayarlar": "",
+    "uploader_versiyon": 0,  # file_uploader'ı sıfırlamak için kullanılan sayaç
 }
 for _k, _v in _varsayilanlar.items():
     if _k not in st.session_state:
@@ -237,6 +289,15 @@ def kaydet_ve_sifirla():
         op_adi = ""
         cnc_no = ""
 
+    # Yüklenen belgeleri al (dinamik anahtar, uploader_versiyon'a göre değişir)
+    uploader_key = f"key_belgeler_{st.session_state.uploader_versiyon}"
+    yuklenen_dosyalar = st.session_state.get(uploader_key, [])
+
+    belge_linkleri = dosyalari_yukle(yuklenen_dosyalar)
+    if belge_linkleri is None:
+        # Yükleme başarısız oldu — kaydı iptal et, kullanıcı tekrar denesin
+        return
+
     kayit = {
         "personel": personel,
         "parca": parca,
@@ -246,6 +307,7 @@ def kaydet_ve_sifirla():
         "aciklama": aciklama,
         "ret_miktari": ret_miktari,
         "uretim_miktari": uretim_miktari,
+        "belge_linkleri": ", ".join(belge_linkleri),
     }
 
     basarili = veri_kaydet(kayit)
@@ -258,7 +320,10 @@ def kaydet_ve_sifirla():
         st.session_state.key_aciklama = ""
         st.session_state.key_ret_miktari = 0
         st.session_state.key_uretim_miktari = 0
-        st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza doğrudan kaydedildi!")
+        st.session_state.uploader_versiyon += 1  # file_uploader'ı sıfırlar
+        belge_sayisi = len(belge_linkleri)
+        ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
+        st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza doğrudan kaydedildi!{ek_mesaj}")
 
 
 def personel_ekle(kaynak_key: str):
@@ -333,6 +398,15 @@ with sekme_saha:
         st.text_input("CNC NO", placeholder="Örn: CNC5", key="key_cnc_no")
 
     st.text_input("RET AÇIKLAMASI (Manuel Detay Giriniz)", placeholder="Örn: ÖLÇÜ DÜŞÜK", key="key_aciklama")
+
+    # YENİ: Belge / fotoğraf ekleme alanı (birden fazla dosya seçilebilir)
+    st.file_uploader(
+        "📎 BELGE / FOTOĞRAF EKLE (Birden fazla dosya seçebilirsiniz)",
+        type=["png", "jpg", "jpeg", "pdf"],
+        accept_multiple_files=True,
+        key=f"key_belgeler_{st.session_state.uploader_versiyon}",
+    )
+
     st.number_input("RET ADEDİ", min_value=0, step=1, key="key_ret_miktari")
     st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key="key_uretim_miktari")
 
