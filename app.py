@@ -22,6 +22,50 @@ st.components.v1.html(
 )
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
+# GÖRSEL İYİLEŞTİRMELER (renkler .streamlit/config.toml içinde ayarlanır)
+st.markdown(
+    """
+    <style>
+    /* Üst sekme çubuğunu sabitle — kaydırınca ekranın üstünde kalır */
+    div[data-testid="stTabs"] > div:first-child {
+        position: sticky;
+        top: 2.6rem;
+        z-index: 999;
+        background-color: var(--background-color, #F8FAFC);
+        padding-top: 0.4rem;
+        padding-bottom: 0.3rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+
+    button[data-baseweb="tab"] {
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+
+    /* Form alanları arası biraz daha ferah */
+    div[data-testid="stVerticalBlockBorderWrapper"] { margin-bottom: 0.25rem; }
+
+    /* Girdi kutularının köşelerini yuvarla */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    textarea {
+        border-radius: 10px !important;
+    }
+
+    /* Kaydet butonunu belirginleştir */
+    div[data-testid="stButton"] button {
+        border-radius: 10px;
+        font-weight: 600;
+        padding: 0.6rem 1rem;
+    }
+
+    /* Ana içerik üstündeki boşluğu azalt */
+    div.block-container { padding-top: 1.2rem; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ==============================================================================
 # 🔗 GOOGLE FORM (YAZMA) VE GOOGLE E-TABLO (OKUMA) AYARLARI
 # Servis hesabı / secrets.toml / API anahtarı GEREKMİYOR — kayıt, sizin
@@ -162,8 +206,6 @@ _varsayilanlar = {
     "key_ret_miktari": 0,
     "key_uretim_miktari": 0,
     "mesaj": None,
-    "key_yeni_personel": "",
-    "key_yeni_parca": "",
     "key_yeni_personel_ayarlar": "",
     "key_yeni_parca_ayarlar": "",
 }
@@ -233,7 +275,25 @@ def parca_ekle(kaynak_key: str):
         st.session_state.mesaj = ("success", f"✅ '{yeni}' parça listesine kalıcı olarak eklendi!")
 
 
-st.title("🏭 MSP KALİTE YÖNETİM SİSTEMİ")
+st.markdown(
+    """
+    <div style="
+        background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
+        padding: 1.3rem 1.8rem;
+        border-radius: 14px;
+        margin-bottom: 0.8rem;
+        box-shadow: 0 4px 14px rgba(37,99,235,0.25);
+    ">
+        <h1 style="color: white; margin: 0; font-size: 1.7rem; line-height: 1.2;">
+            🏭 MSP KALİTE YÖNETİM SİSTEMİ
+        </h1>
+        <p style="color: #DBEAFE; margin: 0.35rem 0 0 0; font-size: 0.95rem;">
+            Saha kalite kontrol veri girişi ve canlı takip
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ",
@@ -255,24 +315,10 @@ with sekme_saha:
         st.session_state.mesaj = None
 
     tum_personeller = ekstra_personeller
-    col_pers, col_pers_ekle = st.columns([5, 1])
-    with col_pers:
-        st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
-    with col_pers_ekle:
-        st.write("")  # etiketle hizalamak için boşluk
-        with st.popover("➕ Ekle", use_container_width=True):
-            st.text_input("Yeni personel adı", key="key_yeni_personel")
-            st.button("Kaydet", key="btn_personel_ekle_saha", on_click=personel_ekle, args=("key_yeni_personel",))
+    st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
 
     tum_parcalar = ekstra_parcalar
-    col_parca, col_parca_ekle = st.columns([5, 1])
-    with col_parca:
-        st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
-    with col_parca_ekle:
-        st.write("")
-        with st.popover("➕ Ekle", use_container_width=True):
-            st.text_input("Yeni parça adı", key="key_yeni_parca")
-            st.button("Kaydet", key="btn_parca_ekle_saha", on_click=parca_ekle, args=("key_yeni_parca",))
+    st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key="key_ret_nedeni")
