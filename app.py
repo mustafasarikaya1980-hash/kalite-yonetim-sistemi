@@ -343,9 +343,14 @@ with sekme_yonetici:
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         toplam_kayit = len(df)
         
-        toplam_ret = df[ret_col].sum() if ret_col else 0
-        toplam_uretim = df[uretim_col].sum() if uretim_col else 0
-        genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0
+        # Sayısal değerleri sıfıra güvenli çekme
+        toplam_ret = float(df[ret_col].sum()) if ret_col and ret_col in df.columns else 0.0
+        toplam_uretim = float(df[uretim_col].sum()) if uretim_col and uretim_col in df.columns else 0.0
+        
+        if pd.isna(toplam_ret): toplam_ret = 0.0
+        if pd.isna(toplam_uretim): toplam_uretim = 0.0
+        
+        genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
         col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
         col_m2.metric("Toplam Üretim Adedi", f"{int(toplam_uretim):,}")
@@ -358,13 +363,13 @@ with sekme_yonetici:
 
         with col_g1:
             st.subheader("📌 Ret Nedenleri Dağılımı")
-            if neden_col and ret_col:
+            if neden_col and ret_col and neden_col in df.columns and ret_col in df.columns:
                 ret_by_reason = df.groupby(neden_col)[ret_col].sum().reset_index()
                 st.bar_chart(data=ret_by_reason, x=neden_col, y=ret_col)
 
         with col_g2:
             st.subheader("🧩 Parça Bazlı Ret Adetleri")
-            if parca_col and ret_col:
+            if parca_col and ret_col and parca_col in df.columns and ret_col in df.columns:
                 ret_by_part = df.groupby(parca_col)[ret_col].sum().reset_index()
                 st.bar_chart(data=ret_by_part, x=parca_col, y=ret_col)
 
@@ -381,14 +386,14 @@ with sekme_raporlar:
     if not df.empty:
         st.subheader("📊 Yönetim Özet Tablosu")
         
-        if parca_col and ret_col and uretim_col:
+        if parca_col and ret_col and uretim_col and parca_col in df.columns:
             ozet_df = df.groupby(parca_col).agg({
                 uretim_col: "sum",
                 ret_col: "sum"
             }).reset_index()
             
-            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_col] / ozet_df[uretim_col]) * 100, 2)
-            ozet_df["PPM"] = round((ozet_df[ret_col] / ozet_df[uretim_col]) * 1000000, 0)
+            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_col] / ozet_df[uretim_col].replace(0, 1)) * 100, 2)
+            ozet_df["PPM"] = round((ozet_df[ret_col] / ozet_df[uretim_col].replace(0, 1)) * 1000000, 0)
             ozet_df = ozet_df.fillna(0)
             
             st.dataframe(ozet_df, use_container_width=True)
@@ -406,7 +411,6 @@ with sekme_raporlar:
                 use_container_width=True
             )
         else:
-            # Sütun ismi eşleşmezse tüm tabloyu direkt göster
             st.dataframe(df, use_container_width=True)
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
