@@ -80,12 +80,30 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXf
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
+# SESSION STATE BAŞLATMA
+_varsayilanlar = {
+    "key_personel": "-- Seçiniz --",
+    "key_parca": "-- Seçiniz --",
+    "key_ret_nedeni": "-- Seçiniz --",
+    "key_op_adi": "",
+    "key_cnc_no": "",
+    "key_aciklama": "",
+    "key_ret_miktari": 0,
+    "key_uretim_miktari": 0,
+    "mesaj": None,
+    "key_yeni_personel_ayarlar": "",
+    "key_yeni_parca_ayarlar": "",
+    "uploader_versiyon": 0,
+}
+for _k, _v in _varsayilanlar.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
 @st.cache_data(ttl=10, show_spinner=False)
 def verileri_yukle():
     try:
         df = pd.read_csv(CSV_URL)
         df = df.dropna(how="all")
-        # Sayısal sütun temizliği
         if not df.empty:
             for col in df.columns:
                 if "RET" in col.upper() and "MIKTAR" in col.upper():
@@ -176,31 +194,13 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
-_varsayilanlar = {
-    "key_personel": "-- Seçiniz --",
-    "key_parca": "-- Seçiniz --",
-    "key_ret_nedeni": "-- Seçiniz --",
-    "key_op_adi": "",
-    "key_cnc_no": "",
-    "key_aciklama": "",
-    "key_ret_miktari": 0,
-    "key_uretim_miktari": 0,
-    "mesaj": None,
-    "key_yeni_personel_ayarlar": "",
-    "key_yeni_parca_ayarlar": "",
-    "uploader_versiyon": 0,
-}
-for _k, _v in _varsayilanlar.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
-
 def kaydet_ve_sifirla():
-    personel = st.session_state.key_personel
-    parca = st.session_state.key_parca
-    ret_nedeni = st.session_state.key_ret_nedeni
-    aciklama = st.session_state.key_aciklama
-    ret_miktari = st.session_state.key_ret_miktari
-    uretim_miktari = st.session_state.key_uretim_miktari
+    personel = st.session_state.get("key_personel", "-- Seçiniz --")
+    parca = st.session_state.get("key_parca", "-- Seçiniz --")
+    ret_nedeni = st.session_state.get("key_ret_nedeni", "-- Seçiniz --")
+    aciklama = st.session_state.get("key_aciklama", "")
+    ret_miktari = st.session_state.get("key_ret_miktari", 0)
+    uretim_miktari = st.session_state.get("key_uretim_miktari", 0)
 
     if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
         st.session_state.mesaj = ("warning", "⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
@@ -213,7 +213,7 @@ def kaydet_ve_sifirla():
         op_adi = ""
         cnc_no = ""
 
-    uploader_key = f"key_belgeler_{st.session_state.uploader_versiyon}"
+    uploader_key = f"key_belgeler_{st.session_state.get('uploader_versiyon', 0)}"
     yuklenen_dosyalar = st.session_state.get(uploader_key, [])
 
     belge_linkleri = dosyalari_yukle(yuklenen_dosyalar)
@@ -242,20 +242,20 @@ def kaydet_ve_sifirla():
         st.session_state.key_aciklama = ""
         st.session_state.key_ret_miktari = 0
         st.session_state.key_uretim_miktari = 0
-        st.session_state.uploader_versiyon += 1
+        st.session_state.uploader_versiyon = st.session_state.get("uploader_versiyon", 0) + 1
         belge_sayisi = len(belge_linkleri)
         ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
         st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
 
 def personel_ekle(kaynak_key: str):
-    yeni = st.session_state[kaynak_key].strip()
+    yeni = st.session_state.get(kaynak_key, "").strip()
     if not yeni: return
     if kalici_liste_ekle("PERSONEL", yeni):
         st.session_state[kaynak_key] = ""
         st.session_state.mesaj = ("success", f"✅ '{yeni}' eklendi!")
 
 def parca_ekle(kaynak_key: str):
-    yeni = st.session_state[kaynak_key].strip()
+    yeni = st.session_state.get(kaynak_key, "").strip()
     if not yeni: return
     if kalici_liste_ekle("PARCA", yeni):
         st.session_state[kaynak_key] = ""
@@ -310,7 +310,7 @@ with sekme_saha:
         "📎 BELGE / FOTOĞRAF EKLE (Birden fazla dosya seçebilirsiniz)",
         type=["png", "jpg", "jpeg", "pdf"],
         accept_multiple_files=True,
-        key=f"key_belgeler_{st.session_state.uploader_versiyon}",
+        key=f"key_belgeler_{st.session_state.get('uploader_versiyon', 0)}",
     )
 
     st.number_input("RET ADEDİ", min_value=0, step=1, key="key_ret_miktari")
@@ -328,11 +328,9 @@ with sekme_yonetici:
 
     df = verileri_yukle()
     if not df.empty:
-        # Metrik Kartları
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         toplam_kayit = len(df)
         
-        # Sütun isimlerini esnek tespit et
         ret_col = [c for c in df.columns if "RET" in c.upper() and "MIKTAR" in c.upper()]
         uretim_col = [c for c in df.columns if "URETIM" in c.upper() and "MIKTAR" in c.upper()]
         
@@ -347,9 +345,7 @@ with sekme_yonetici:
 
         st.markdown("---")
         
-        # Otomatik Grafikler
         col_g1, col_g2 = st.columns(2)
-        
         neden_col = [c for c in df.columns if "NEDEN" in c.upper()]
         parca_col = [c for c in df.columns if "PARCA" in c.upper() or "PARÇA" in c.upper()]
 
@@ -397,7 +393,6 @@ with sekme_raporlar:
             
             st.dataframe(ozet_df, use_container_width=True)
 
-            # Excel İndirme Butonu
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                 ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
