@@ -104,12 +104,6 @@ def verileri_yukle():
     try:
         df = pd.read_csv(CSV_URL)
         df = df.dropna(how="all")
-        if not df.empty:
-            for col in df.columns:
-                if "RET" in col.upper() and ("MIKTAR" in col.upper() or "ADET" in col.upper()):
-                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-                if "URETIM" in col.upper() and ("MIKTAR" in col.upper() or "ADET" in col.upper()):
-                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         return df
     except Exception as e:
         st.session_state["_son_okuma_hatasi"] = str(e)
@@ -318,18 +312,12 @@ with sekme_saha:
 
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
-# --- HELPER DFX SÜTUN TESPİTİ ---
-df = verileri_yukle()
-def sutun_bul(df, kelimeler):
+# SÜTUN TESPİT YARDIMCISI (GÜVENLİ)
+def sutun_isimi_getir(df, kelimeler):
     for c in df.columns:
-        if any(k.upper() in c.upper() for k in kelimeler):
+        if any(k.upper() in str(c).upper() for k in kelimeler):
             return c
     return None
-
-ret_col = sutun_bul(df, ["RET MİKTARI", "RET MIKTARI", "RET ADEDİ", "RET"])
-uretim_col = sutun_bul(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
-parca_col = sutun_bul(df, ["PARÇA", "PARCA"])
-neden_col = sutun_bul(df, ["NEDEN", "RET NEDENİ"])
 
 # --- 2. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
@@ -339,22 +327,31 @@ with sekme_yonetici:
         ekstra_liste_yukle.clear()
         st.rerun()
 
+    df = verileri_yukle()
     if not df.empty:
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         toplam_kayit = len(df)
         
-        # Sayısal değerleri sıfıra güvenli çekme
-        toplam_ret = float(df[ret_col].sum()) if ret_col and ret_col in df.columns else 0.0
-        toplam_uretim = float(df[uretim_col].sum()) if uretim_col and uretim_col in df.columns else 0.0
-        
-        if pd.isna(toplam_ret): toplam_ret = 0.0
-        if pd.isna(toplam_uretim): toplam_uretim = 0.0
-        
+        ret_c = sutun_isimi_getir(df, ["RET MİKTARI", "RET MIKTARI", "RET ADEDİ", "RET"])
+        uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
+        parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
+        neden_c = sutun_isimi_getir(df, ["NEDEN", "RET NEDENİ"])
+
+        # Sayısal veri dönüşümü
+        toplam_ret = 0
+        toplam_uretim = 0
+        if ret_c:
+            s_ret = pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
+            toplam_ret = int(s_ret.sum())
+        if uretim_c:
+            s_uretim = pd.to_numeric(df[uretim_c], errors="coerce").fillna(0)
+            toplam_uretim = int(s_uretim.sum())
+
         genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
         col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
-        col_m2.metric("Toplam Üretim Adedi", f"{int(toplam_uretim):,}")
-        col_m3.metric("Toplam Ret Adedi", f"{int(toplam_ret):,}")
+        col_m2.metric("Toplam Üretim Adedi", f"{toplam_uretim:,}")
+        col_m3.metric("Toplam Ret Adedi", f"{toplam_ret:,}")
         col_m4.metric("Genel Hata Oranı (PPM)", f"{genel_ppm:,}")
 
         st.markdown("---")
@@ -363,15 +360,19 @@ with sekme_yonetici:
 
         with col_g1:
             st.subheader("📌 Ret Nedenleri Dağılımı")
-            if neden_col and ret_col and neden_col in df.columns and ret_col in df.columns:
-                ret_by_reason = df.groupby(neden_col)[ret_col].sum().reset_index()
-                st.bar_chart(data=ret_by_reason, x=neden_col, y=ret_col)
+            if neden_c and ret_c:
+                temp_df = df.copy()
+                temp_df[ret_c] = pd.to_numeric(temp_df[ret_c], errors="coerce").fillna(0)
+                ret_by_reason = temp_df.groupby(neden_c)[ret_c].sum().reset_index()
+                st.bar_chart(data=ret_by_reason, x=neden_c, y=ret_c)
 
         with col_g2:
             st.subheader("🧩 Parça Bazlı Ret Adetleri")
-            if parca_col and ret_col and parca_col in df.columns and ret_col in df.columns:
-                ret_by_part = df.groupby(parca_col)[ret_col].sum().reset_index()
-                st.bar_chart(data=ret_by_part, x=parca_col, y=ret_col)
+            if parca_c and ret_c:
+                temp_df = df.copy()
+                temp_df[ret_c] = pd.to_numeric(temp_df[ret_c], errors="coerce").fillna(0)
+                ret_by_part = temp_df.groupby(parca_c)[ret_c].sum().reset_index()
+                st.bar_chart(data=ret_by_part, x=parca_c, y=ret_c)
 
         st.subheader("📋 Tüm Ham Veri Tablosu")
         st.dataframe(df, use_container_width=True)
@@ -383,18 +384,26 @@ with sekme_raporlar:
     st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
     st.caption("Aşağıdaki analiz özeti doğrudan üst yönetime sunulabilecek formatta hazırlanmıştır.")
 
+    df = verileri_yukle()
     if not df.empty:
         st.subheader("📊 Yönetim Özet Tablosu")
         
-        if parca_col and ret_col and uretim_col and parca_col in df.columns:
-            ozet_df = df.groupby(parca_col).agg({
-                uretim_col: "sum",
-                ret_col: "sum"
+        ret_c = sutun_isimi_getir(df, ["RET MİKTARI", "RET MIKTARI", "RET ADEDİ", "RET"])
+        uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
+        parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
+
+        if parca_c and ret_c and uretim_c:
+            temp_df = df.copy()
+            temp_df[ret_c] = pd.to_numeric(temp_df[ret_c], errors="coerce").fillna(0)
+            temp_df[uretim_c] = pd.to_numeric(temp_df[uretim_c], errors="coerce").fillna(0)
+
+            ozet_df = temp_df.groupby(parca_c).agg({
+                uretim_c: "sum",
+                ret_c: "sum"
             }).reset_index()
             
-            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_col] / ozet_df[uretim_col].replace(0, 1)) * 100, 2)
-            ozet_df["PPM"] = round((ozet_df[ret_col] / ozet_df[uretim_col].replace(0, 1)) * 1000000, 0)
-            ozet_df = ozet_df.fillna(0)
+            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_c] / ozet_df[uretim_c].replace(0, 1)) * 100, 2)
+            ozet_df["PPM"] = round((ozet_df[ret_c] / ozet_df[uretim_c].replace(0, 1)) * 1000000, 0)
             
             st.dataframe(ozet_df, use_container_width=True)
 
