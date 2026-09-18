@@ -90,10 +90,10 @@ _varsayilanlar = {
     "key_aciklama": "",
     "key_ret_miktari": 0,
     "key_uretim_miktari": 0,
+    "key_belgeler": [],
     "mesaj": None,
     "key_yeni_personel_ayarlar": "",
     "key_yeni_parca_ayarlar": "",
-    "uploader_versiyon": 0,
 }
 for _k, _v in _varsayilanlar.items():
     if _k not in st.session_state:
@@ -207,8 +207,7 @@ def kaydet_ve_sifirla():
         op_adi = ""
         cnc_no = ""
 
-    uploader_key = f"key_belgeler_{st.session_state.get('uploader_versiyon', 0)}"
-    yuklenen_dosyalar = st.session_state.get(uploader_key, [])
+    yuklenen_dosyalar = st.session_state.get("key_belgeler", [])
 
     belge_linkleri = dosyalari_yukle(yuklenen_dosyalar)
     if belge_linkleri is None:
@@ -236,7 +235,7 @@ def kaydet_ve_sifirla():
         st.session_state.key_aciklama = ""
         st.session_state.key_ret_miktari = 0
         st.session_state.key_uretim_miktari = 0
-        st.session_state.uploader_versiyon = st.session_state.get("uploader_versiyon", 0) + 1
+        st.session_state.key_belgeler = []
         belge_sayisi = len(belge_linkleri)
         ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
         st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
@@ -254,6 +253,14 @@ def parca_ekle(kaynak_key: str):
     if kalici_liste_ekle("PARCA", yeni):
         st.session_state[kaynak_key] = ""
         st.session_state.mesaj = ("success", f"✅ '{yeni}' eklendi!")
+
+# GÜVENLİ SÜTUN BULUCU
+def sutun_isimi_getir(df, kelimeler):
+    for c in df.columns:
+        c_str = str(c).strip().upper()
+        if any(k.upper() in c_str for k in kelimeler):
+            return c
+    return None
 
 # HEADER
 st.markdown(
@@ -304,20 +311,13 @@ with sekme_saha:
         "📎 BELGE / FOTOĞRAF EKLE (Birden fazla dosya seçebilirsiniz)",
         type=["png", "jpg", "jpeg", "pdf"],
         accept_multiple_files=True,
-        key=f"key_belgeler_{st.session_state.get('uploader_versiyon', 0)}",
+        key="key_belgeler",
     )
 
     st.number_input("RET ADEDİ", min_value=0, step=1, key="key_ret_miktari")
     st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key="key_uretim_miktari")
 
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
-
-# GÜVENLİ SÜTUN BULUCU
-def sutun_isimi_getir(df, kelimeler):
-    for c in df.columns:
-        if any(k.upper() in str(c).upper() for k in kelimeler):
-            return c
-    return None
 
 # --- 2. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
@@ -332,10 +332,10 @@ with sekme_yonetici:
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         toplam_kayit = len(df)
         
-        ret_c = sutun_isimi_getir(df, ["RET MİKTARI", "RET MIKTARI", "RET ADEDİ", "RET"])
+        ret_c = sutun_isimi_getir(df, ["RET ADEDİ", "RET ADEDI", "RET MİKTARI", "RET MIKTARI", "RET"])
         uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
         parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
-        neden_c = sutun_isimi_getir(df, ["NEDEN", "RET NEDENİ"])
+        neden_c = sutun_isimi_getir(df, ["RET NEDENİ", "RET NEDENI", "NEDEN"])
 
         toplam_ret = 0
         toplam_uretim = 0
@@ -359,7 +359,6 @@ with sekme_yonetici:
             st.subheader("📌 Ret Nedenleri Dağılımı")
             if neden_c and ret_c:
                 try:
-                    # HATA ÖNLENMİŞ GRUPLAMA (as_index=False ile çakışma tamamen engellendi)
                     temp_df = pd.DataFrame({
                         "Nedeni": df[neden_c].astype(str),
                         "Adet": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
@@ -396,7 +395,7 @@ with sekme_raporlar:
     if not df.empty:
         st.subheader("📊 Yönetim Özet Tablosu")
         
-        ret_c = sutun_isimi_getir(df, ["RET MİKTARI", "RET MIKTARI", "RET ADEDİ", "RET"])
+        ret_c = sutun_isimi_getir(df, ["RET ADEDİ", "RET ADEDI", "RET MİKTARI", "RET MIKTARI", "RET"])
         uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
         parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
 
