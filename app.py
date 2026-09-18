@@ -312,7 +312,7 @@ with sekme_saha:
 
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
-# SÜTUN TESPİT YARDIMCISI (GÜVENLİ)
+# GÜVENLİ SÜTUN BULUCU
 def sutun_isimi_getir(df, kelimeler):
     for c in df.columns:
         if any(k.upper() in str(c).upper() for k in kelimeler):
@@ -337,15 +337,12 @@ with sekme_yonetici:
         parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
         neden_c = sutun_isimi_getir(df, ["NEDEN", "RET NEDENİ"])
 
-        # Sayısal veri dönüşümü
         toplam_ret = 0
         toplam_uretim = 0
         if ret_c:
-            s_ret = pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
-            toplam_ret = int(s_ret.sum())
+            toplam_ret = int(pd.to_numeric(df[ret_c], errors="coerce").fillna(0).sum())
         if uretim_c:
-            s_uretim = pd.to_numeric(df[uretim_c], errors="coerce").fillna(0)
-            toplam_uretim = int(s_uretim.sum())
+            toplam_uretim = int(pd.to_numeric(df[uretim_c], errors="coerce").fillna(0).sum())
 
         genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
@@ -361,18 +358,29 @@ with sekme_yonetici:
         with col_g1:
             st.subheader("📌 Ret Nedenleri Dağılımı")
             if neden_c and ret_c:
-                temp_df = df.copy()
-                temp_df[ret_c] = pd.to_numeric(temp_df[ret_c], errors="coerce").fillna(0)
-                ret_by_reason = temp_df.groupby(neden_c)[ret_c].sum().reset_index()
-                st.bar_chart(data=ret_by_reason, x=neden_c, y=ret_c)
+                try:
+                    # HATA ÖNLENMİŞ GRUPLAMA (as_index=False ile çakışma tamamen engellendi)
+                    temp_df = pd.DataFrame({
+                        "Nedeni": df[neden_c].astype(str),
+                        "Adet": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
+                    })
+                    ret_by_reason = temp_df.groupby("Nedeni", as_index=False)["Adet"].sum()
+                    st.bar_chart(data=ret_by_reason, x="Nedeni", y="Adet")
+                except Exception as ex:
+                    st.warning(f"Grafik çizdirilemedi: {ex}")
 
         with col_g2:
             st.subheader("🧩 Parça Bazlı Ret Adetleri")
             if parca_c and ret_c:
-                temp_df = df.copy()
-                temp_df[ret_c] = pd.to_numeric(temp_df[ret_c], errors="coerce").fillna(0)
-                ret_by_part = temp_df.groupby(parca_c)[ret_c].sum().reset_index()
-                st.bar_chart(data=ret_by_part, x=parca_c, y=ret_c)
+                try:
+                    temp_df = pd.DataFrame({
+                        "Parca": df[parca_c].astype(str),
+                        "Adet": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
+                    })
+                    ret_by_part = temp_df.groupby("Parca", as_index=False)["Adet"].sum()
+                    st.bar_chart(data=ret_by_part, x="Parca", y="Adet")
+                except Exception as ex:
+                    st.warning(f"Grafik çizdirilemedi: {ex}")
 
         st.subheader("📋 Tüm Ham Veri Tablosu")
         st.dataframe(df, use_container_width=True)
@@ -393,32 +401,37 @@ with sekme_raporlar:
         parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
 
         if parca_c and ret_c and uretim_c:
-            temp_df = df.copy()
-            temp_df[ret_c] = pd.to_numeric(temp_df[ret_c], errors="coerce").fillna(0)
-            temp_df[uretim_c] = pd.to_numeric(temp_df[uretim_c], errors="coerce").fillna(0)
+            try:
+                temp_df = pd.DataFrame({
+                    "Parça Adı": df[parca_c].astype(str),
+                    "Toplam Üretim": pd.to_numeric(df[uretim_c], errors="coerce").fillna(0),
+                    "Toplam Ret": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
+                })
 
-            ozet_df = temp_df.groupby(parca_c).agg({
-                uretim_c: "sum",
-                ret_c: "sum"
-            }).reset_index()
-            
-            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_c] / ozet_df[uretim_c].replace(0, 1)) * 100, 2)
-            ozet_df["PPM"] = round((ozet_df[ret_c] / ozet_df[uretim_c].replace(0, 1)) * 1000000, 0)
-            
-            st.dataframe(ozet_df, use_container_width=True)
+                ozet_df = temp_df.groupby("Parça Adı", as_index=False).agg({
+                    "Toplam Üretim": "sum",
+                    "Toplam Ret": "sum"
+                })
+                
+                ozet_df["Hata Oranı (%)"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 100, 2)
+                ozet_df["PPM"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 1000000, 0)
+                
+                st.dataframe(ozet_df, use_container_width=True)
 
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
-                df.to_excel(writer, sheet_name="Ham_Veriler", index=False)
-            
-            st.download_button(
-                label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
-                data=buffer.getvalue(),
-                file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                    ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
+                    df.to_excel(writer, sheet_name="Ham_Veriler", index=False)
+                
+                st.download_button(
+                    label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
+                    data=buffer.getvalue(),
+                    file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            except Exception as ex:
+                st.dataframe(df, use_container_width=True)
         else:
             st.dataframe(df, use_container_width=True)
             buffer = io.BytesIO()
