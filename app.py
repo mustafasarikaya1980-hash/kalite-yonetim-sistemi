@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+import io
 import streamlit as st
 import pandas as pd
 import requests
@@ -7,7 +8,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
-# TARAYICI OTOMATİK ÇEVİRİ ENGELİ (HATA ÖNLEYİCİ)
+# TARAYICI OTOMATİK ÇEVİRİ ENGELİ
 st.components.v1.html(
     """
     <script>
@@ -23,13 +24,10 @@ st.components.v1.html(
 )
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
-# GÖRSEL İYİLEŞTİRMELER (renkler .streamlit/config.toml içinde ayarlanır)
+# GÖRSEL CSS İYİLEŞTİRMELERİ
 st.markdown(
     """
     <style>
-    /* Üst sekme çubuğunu sabitle — kaydırınca ekranın üstünde kalır.
-       Streamlit'in iç yapısı sürümden sürümden sürümden değişebildiği için birden
-       fazla olası hedefi aynı anda sabitliyoruz. */
     div[data-testid="stTabs"],
     div[data-testid="stTabs"] > div:first-child,
     div[data-baseweb="tab-list"] {
@@ -41,30 +39,10 @@ st.markdown(
         padding-bottom: 0.3rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     }
-
-    button[data-baseweb="tab"] {
-        font-size: 1.05rem;
-        font-weight: 600;
-    }
-
-    /* Form alanları arası biraz daha ferah */
+    button[data-baseweb="tab"] { font-size: 1.05rem; font-weight: 600; }
     div[data-testid="stVerticalBlockBorderWrapper"] { margin-bottom: 0.25rem; }
-
-    /* Girdi kutularının köşelerini yuvarla */
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div,
-    textarea {
-        border-radius: 10px !important;
-    }
-
-    /* Kaydet butonunu belirginleştir */
-    div[data-testid="stButton"] button {
-        border-radius: 10px;
-        font-weight: 600;
-        padding: 0.6rem 1rem;
-    }
-
-    /* Ana içerik üstündeki boşluğu azalt */
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, textarea { border-radius: 10px !important; }
+    div[data-testid="stButton"] button { border-radius: 10px; font-weight: 600; padding: 0.6rem 1rem; }
     div.block-container { padding-top: 1.2rem; }
     </style>
     """,
@@ -72,16 +50,9 @@ st.markdown(
 )
 
 # ==============================================================================
-# 🔗 GOOGLE FORM (YAZMA) VE GOOGLE E-TABLO (OKUMA) AYARLARI
-# Servis hesabı / secrets.toml / API anahtarı GEREKMİYOR — kayıt, sizin
-# oluşturduğunuz Google Form'a arka planda gönderilir; okuma ise tablonun
-# herkese açık CSV linki üzerinden yapılır.
+# AYARLAR
 # ==============================================================================
-
-# --- Form 1: Kalite kontrol kayıtları ---
-FORM_RESPONSE_URL = (
-    "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
-)
+FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
 ENTRY_PERSONEL = "entry.1505600207"
 ENTRY_PARCA = "entry.1034697779"
 ENTRY_RET_NEDENI = "entry.1351128780"
@@ -90,48 +61,44 @@ ENTRY_CNC_NO = "entry.657669024"
 ENTRY_ACIKLAMA = "entry.686625208"
 ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
-
-# YENİ: Belge/fotoğraf linklerinin yazılacağı soru ID'si
 ENTRY_BELGE_LINKLERI = "entry.795755675"
 
-# --- Form 2: Yeni personel / parça ekleme (kalıcı, herkese ortak liste) ---
-FORM2_RESPONSE_URL = (
-    "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT_EMRb_NHZsbcpMk-ZZmu0sQflfC_tt_A/formResponse"
-)
+FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT_EMRb_NHZsbcpMk-ZZmu0sQflfC_tt_A/formResponse"
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# Yanıtların düştüğü Google E-Tablo
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GID = "1834241278"          # Kalite kontrol kayıtları sekmesi
-SHEET2_GID = "1493441004"         # Yeni personel/parça kayıtları sekmesi
+SHEET_GID = "1834241278"
+SHEET2_GID = "1493441004"
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 
-# --- Belge/fotoğraf yükleme için Güncel Google Apps Script Web App adresi ---
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXfMCvGOt8B7sqRWmtpmZOpQPRgf_eiSLxsjucQCEJ-hntQkN/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
-
 @st.cache_data(ttl=10, show_spinner=False)
 def verileri_yukle():
-    """Google E-Tablodaki kalite kayıtlarını herkese açık CSV linkinden okur."""
     try:
         df = pd.read_csv(CSV_URL)
         df = df.dropna(how="all")
+        # Sayısal sütun temizliği
+        if not df.empty:
+            for col in df.columns:
+                if "RET" in col.upper() and "MIKTAR" in col.upper():
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+                if "URETIM" in col.upper() and "MIKTAR" in col.upper():
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         return df
     except Exception as e:
         st.session_state["_son_okuma_hatasi"] = str(e)
         return pd.DataFrame()
 
-
 @st.cache_data(ttl=10, show_spinner=False)
 def ekstra_liste_yukle():
-    """Arayüzden eklenmiş yeni personel/parça isimlerini okur."""
     try:
         df = pd.read_csv(CSV2_URL)
         df = df.dropna(how="all")
@@ -147,32 +114,22 @@ def ekstra_liste_yukle():
     except Exception:
         return [], []
 
-
 def dosyalari_yukle(dosyalar):
-    """Yüklenen dosyaları (fotoğraf/belge) Apps Script köprüsü üzerinden
-    Google Drive'a gönderir ve paylaşım linklerini döndürür."""
     if not dosyalar:
         return []
-
     if not APPS_SCRIPT_URL or "BURAYA" in APPS_SCRIPT_URL:
         st.error("❌ Belge yükleme adresi (Apps Script URL) henüz ayarlanmadı.")
         return None
-
     payload_dosyalar = []
     for f in dosyalar:
         icerik = f.getvalue()
-        payload_dosyalar.append(
-            {
-                "name": f.name,
-                "mimeType": f.type or "application/octet-stream",
-                "data": base64.b64encode(icerik).decode("utf-8"),
-            }
-        )
-
+        payload_dosyalar.append({
+            "name": f.name,
+            "mimeType": f.type or "application/octet-stream",
+            "data": base64.b64encode(icerik).decode("utf-8"),
+        })
     try:
-        resp = requests.post(
-            APPS_SCRIPT_URL, json={"files": payload_dosyalar}, headers=_HEADERS, timeout=60
-        )
+        resp = requests.post(APPS_SCRIPT_URL, json={"files": payload_dosyalar}, headers=_HEADERS, timeout=60)
         sonuc = resp.json()
         if sonuc.get("success"):
             return sonuc.get("links", [])
@@ -182,9 +139,7 @@ def dosyalari_yukle(dosyalar):
         st.error(f"❌ Belgeler yüklenirken bağlantı hatası oluştu: {e}")
         return None
 
-
 def veri_kaydet(yeni_veri: dict) -> bool:
-    """Google Form'un formResponse adresine POST göndererek e-tabloya yeni kalite kaydı düşürür."""
     payload = {
         ENTRY_PERSONEL: yeni_veri["personel"],
         ENTRY_PARCA: yeni_veri["parca"],
@@ -202,31 +157,24 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         if resp.status_code in (200, 302):
             verileri_yukle.clear()
             return True
-        st.error(f"❌ Google Form'a gönderilirken beklenmeyen bir yanıt alındı (kod: {resp.status_code}).")
+        st.error(f"❌ Google Form'a gönderilirken hata alındı (kod: {resp.status_code}).")
         return False
     except Exception as e:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
-
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
-    """Yeni bir personel/parça adını ikinci Google Form üzerinden kaydeder."""
-    payload = {
-        ENTRY2_TIP: tip,
-        ENTRY2_DEGER: deger,
-        "emailAddress": SABIT_EPOSTA,
-    }
+    payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
     try:
         resp = requests.post(FORM2_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
             ekstra_liste_yukle.clear()
             return True
-        st.error(f"❌ Kaydedilirken beklenmeyen bir yanıt alındı (kod: {resp.status_code}).")
+        st.error(f"❌ Kaydedilirken hata alındı (kod: {resp.status_code}).")
         return False
     except Exception as e:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
-
 
 _varsayilanlar = {
     "key_personel": "-- Seçiniz --",
@@ -245,7 +193,6 @@ _varsayilanlar = {
 for _k, _v in _varsayilanlar.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
-
 
 def kaydet_ve_sifirla():
     personel = st.session_state.key_personel
@@ -298,64 +245,49 @@ def kaydet_ve_sifirla():
         st.session_state.uploader_versiyon += 1
         belge_sayisi = len(belge_linkleri)
         ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
-        st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza doğrudan kaydedildi!{ek_mesaj}")
-
+        st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
 
 def personel_ekle(kaynak_key: str):
     yeni = st.session_state[kaynak_key].strip()
-    if not yeni:
-        return
+    if not yeni: return
     if kalici_liste_ekle("PERSONEL", yeni):
         st.session_state[kaynak_key] = ""
-        st.session_state.mesaj = ("success", f"✅ '{yeni}' personel listesine kalıcı olarak eklendi!")
-
+        st.session_state.mesaj = ("success", f"✅ '{yeni}' eklendi!")
 
 def parca_ekle(kaynak_key: str):
     yeni = st.session_state[kaynak_key].strip()
-    if not yeni:
-        return
+    if not yeni: return
     if kalici_liste_ekle("PARCA", yeni):
         st.session_state[kaynak_key] = ""
-        st.session_state.mesaj = ("success", f"✅ '{yeni}' parça listesine kalıcı olarak eklendi!")
+        st.session_state.mesaj = ("success", f"✅ '{yeni}' eklendi!")
 
-
+# HEADER
 st.markdown(
     """
-    <div style="
-        background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
-        padding: 1.3rem 1.8rem;
-        border-radius: 14px;
-        margin-bottom: 0.8rem;
-        box-shadow: 0 4px 14px rgba(37,99,235,0.25);
-    ">
-        <h1 style="color: white; margin: 0; font-size: 1.7rem; line-height: 1.2;">
-            🏭 MSP KALİTE YÖNETİM SİSTEMİ
-        </h1>
-        <p style="color: #DBEAFE; margin: 0.35rem 0 0 0; font-size: 0.95rem;">
-            Saha kalite kontrol veri girişi ve canlı takip
-        </p>
+    <div style="background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%); padding: 1.3rem 1.8rem; border-radius: 14px; margin-bottom: 0.8rem; box-shadow: 0 4px 14px rgba(37,99,235,0.25);">
+        <h1 style="color: white; margin: 0; font-size: 1.7rem; line-height: 1.2;">🏭 MSP KALİTE YÖNETİM SİSTEMİ</h1>
+        <p style="color: #DBEAFE; margin: 0.35rem 0 0 0; font-size: 0.95rem;">Saha kalite kontrol veri girişi, otomatik analiz ve yönetim raporlama</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
+sekme_saha, sekme_yonetici, sekme_raporlar, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ",
-    "📊 YÖNETİCİ PANELİ",
+    "📊 YÖNETİCİ PANELİ & ANALİZ",
+    "📈 ÜST YÖNETİM RAPORLARI",
     "⚙️ YÖNETİM & AYARLAR",
 ])
 
 ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
+# --- 1. SEKME: SAHA GİRİŞİ ---
 with sekme_saha:
     st.header("Kalite Kontrol Formu")
-
     if st.session_state.mesaj:
         m_tur, m_metin = st.session_state.mesaj
-        if m_tur == "warning":
-            st.warning(m_metin)
-        elif m_tur == "success":
-            st.success(m_metin)
+        if m_tur == "warning": st.warning(m_metin)
+        elif m_tur == "success": st.success(m_metin)
         st.session_state.mesaj = None
 
     tum_personeller = ekstra_personeller
@@ -386,8 +318,9 @@ with sekme_saha:
 
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
+# --- 2. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
-    st.header("Anlık Kalite Takip Ekranı (Canlı E-Tablo)")
+    st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
     if st.button("🔄 Verileri Yenile"):
         verileri_yukle.clear()
         ekstra_liste_yukle.clear()
@@ -395,44 +328,105 @@ with sekme_yonetici:
 
     df = verileri_yukle()
     if not df.empty:
+        # Metrik Kartları
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        toplam_kayit = len(df)
+        
+        # Sütun isimlerini esnek tespit et
+        ret_col = [c for c in df.columns if "RET" in c.upper() and "MIKTAR" in c.upper()]
+        uretim_col = [c for c in df.columns if "URETIM" in c.upper() and "MIKTAR" in c.upper()]
+        
+        toplam_ret = df[ret_col[0]].sum() if ret_col else 0
+        toplam_uretim = df[uretim_col[0]].sum() if uretim_col else 0
+        genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0
+
+        col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
+        col_m2.metric("Toplam Üretim Adedi", f"{int(toplam_uretim):,}")
+        col_m3.metric("Toplam Ret Adedi", f"{int(toplam_ret):,}")
+        col_m4.metric("Genel Hata Oranı (PPM)", f"{genel_ppm:,}")
+
+        st.markdown("---")
+        
+        # Otomatik Grafikler
+        col_g1, col_g2 = st.columns(2)
+        
+        neden_col = [c for c in df.columns if "NEDEN" in c.upper()]
+        parca_col = [c for c in df.columns if "PARCA" in c.upper() or "PARÇA" in c.upper()]
+
+        with col_g1:
+            st.subheader("📌 Ret Nedenleri Dağılımı")
+            if neden_col and ret_col:
+                ret_by_reason = df.groupby(neden_col[0])[ret_col[0]].sum().reset_index()
+                st.bar_chart(data=ret_by_reason, x=neden_col[0], y=ret_col[0])
+
+        with col_g2:
+            st.subheader("🧩 Parça Bazlı Ret Adetleri")
+            if parca_col and ret_col:
+                ret_by_part = df.groupby(parca_col[0])[ret_col[0]].sum().reset_index()
+                st.bar_chart(data=ret_by_part, x=parca_col[0], y=ret_col[0])
+
+        st.subheader("📋 Tüm Ham Veri Tablosu")
         st.dataframe(df, use_container_width=True)
     else:
         st.info("Henüz tabloya kaydedilmiş veri bulunmuyor.")
-        if st.session_state.get("_son_okuma_hatasi"):
-            with st.expander("Teknik detay (veri okunamadıysa)"):
-                st.code(st.session_state["_son_okuma_hatasi"])
 
+# --- 3. SEKME: ÜST YÖNETİM RAPORLARI ---
+with sekme_raporlar:
+    st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
+    st.caption("Aşağıdaki analiz özeti doğrudan üst yönetime sunulabilecek formatta hazırlanmıştır.")
+
+    df = verileri_yukle()
+    if not df.empty:
+        neden_col = [c for c in df.columns if "NEDEN" in c.upper()]
+        parca_col = [c for c in df.columns if "PARCA" in c.upper() or "PARÇA" in c.upper()]
+        personel_col = [c for c in df.columns if "PERSONEL" in c.upper()]
+        ret_col = [c for c in df.columns if "RET" in c.upper() and "MIKTAR" in c.upper()]
+        uretim_col = [c for c in df.columns if "URETIM" in c.upper() and "MIKTAR" in c.upper()]
+
+        st.subheader("📊 Yönetim Özet Tablosu")
+        
+        if parca_col and ret_col and uretim_col:
+            ozet_df = df.groupby(parca_col[0]).agg({
+                uretim_col[0]: "sum",
+                ret_col[0]: "sum"
+            }).reset_index()
+            
+            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_col[0]] / ozet_df[uretim_col[0]]) * 100, 2)
+            ozet_df["PPM"] = round((ozet_df[ret_col[0]] / ozet_df[uretim_col[0]]) * 1000000, 0)
+            ozet_df = ozet_df.fillna(0)
+            
+            st.dataframe(ozet_df, use_container_width=True)
+
+            # Excel İndirme Butonu
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
+                df.to_excel(writer, sheet_name="Ham_Veriler", index=False)
+            
+            st.download_button(
+                label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
+                data=buffer.getvalue(),
+                file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+    else:
+        st.info("Rapor oluşturmak için veri bulunamadı.")
+
+# --- 4. SEKME: AYARLAR ---
 with sekme_ayarlar:
     st.header("Personel ve Parça Listesini Yönet")
-    st.caption("Buradan eklediğiniz isimler kalıcıdır ve tüm cihazlar/kullanıcılar için ortaktır.")
-    st.info(
-        "🗑️ Bir ismi **silmek** veya **düzeltmek** için buradan yapamazsınız (Google Form sadece "
-        "ekleme yapabilir) — bunun için doğrudan Google E-Tablodaki "
-        "[Form Yanıtları 3 sekmesini](https://docs.google.com/spreadsheets/d/"
-        f"{SPREADSHEET_ID}/edit#gid={SHEET2_GID}) açın, ilgili satırı bulup hücreyi düzenleyin "
-        "ya da satırı silin. Değişiklik uygulamaya en geç 10 saniyede (veya 'Verileri Yenile'ye "
-        "basınca hemen) yansır."
-    )
+    st.caption("Buradan eklediğiniz isimler kalıcıdır ve tüm cihazlar için ortaktır.")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         st.subheader("👤 Yeni Personel Ekle")
         st.text_input("Personel Adı Soyadı", key="key_yeni_personel_ayarlar")
-        st.button(
-            "Personel Ekle",
-            key="btn_personel_ekle_ayarlar",
-            on_click=personel_ekle,
-            args=("key_yeni_personel_ayarlar",),
-        )
+        st.button("Personel Ekle", key="btn_personel_ekle_ayarlar", on_click=personel_ekle, args=("key_yeni_personel_ayarlar",))
         if ekstra_personeller:
-            st.caption("Şu ana kadar eklenenler: " + ", ".join(ekstra_personeller))
+            st.caption("Mevcut Personeller: " + ", ".join(ekstra_personeller))
     with col_p2:
         st.subheader("🧩 Yeni Parça Ekle")
         st.text_input("Parça Adı", key="key_yeni_parca_ayarlar")
-        st.button(
-            "Parça Ekle",
-            key="btn_parca_ekle_ayarlar",
-            on_click=parca_ekle,
-            args=("key_yeni_parca_ayarlar",),
-        )
+        st.button("Parça Ekle", key="btn_parca_ekle_ayarlar", on_click=parca_ekle, args=("key_yeni_parca_ayarlar",))
         if ekstra_parcalar:
-            st.caption("Şu ana kadar eklenenler: " + ", ".join(ekstra_parcalar))
+            st.caption("Mevcut Parçalar: " + ", ".join(ekstra_parcalar))
