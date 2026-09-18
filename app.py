@@ -106,9 +106,9 @@ def verileri_yukle():
         df = df.dropna(how="all")
         if not df.empty:
             for col in df.columns:
-                if "RET" in col.upper() and "MIKTAR" in col.upper():
+                if "RET" in col.upper() and ("MIKTAR" in col.upper() or "ADET" in col.upper()):
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-                if "URETIM" in col.upper() and "MIKTAR" in col.upper():
+                if "URETIM" in col.upper() and ("MIKTAR" in col.upper() or "ADET" in col.upper()):
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         return df
     except Exception as e:
@@ -318,6 +318,19 @@ with sekme_saha:
 
     st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
 
+# --- HELPER DFX SÜTUN TESPİTİ ---
+df = verileri_yukle()
+def sutun_bul(df, kelimeler):
+    for c in df.columns:
+        if any(k.upper() in c.upper() for k in kelimeler):
+            return c
+    return None
+
+ret_col = sutun_bul(df, ["RET MİKTARI", "RET MIKTARI", "RET ADEDİ", "RET"])
+uretim_col = sutun_bul(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
+parca_col = sutun_bul(df, ["PARÇA", "PARCA"])
+neden_col = sutun_bul(df, ["NEDEN", "RET NEDENİ"])
+
 # --- 2. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
     st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
@@ -326,16 +339,12 @@ with sekme_yonetici:
         ekstra_liste_yukle.clear()
         st.rerun()
 
-    df = verileri_yukle()
     if not df.empty:
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         toplam_kayit = len(df)
         
-        ret_col = [c for c in df.columns if "RET" in c.upper() and "MIKTAR" in c.upper()]
-        uretim_col = [c for c in df.columns if "URETIM" in c.upper() and "MIKTAR" in c.upper()]
-        
-        toplam_ret = df[ret_col[0]].sum() if ret_col else 0
-        toplam_uretim = df[uretim_col[0]].sum() if uretim_col else 0
+        toplam_ret = df[ret_col].sum() if ret_col else 0
+        toplam_uretim = df[uretim_col].sum() if uretim_col else 0
         genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0
 
         col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
@@ -346,20 +355,18 @@ with sekme_yonetici:
         st.markdown("---")
         
         col_g1, col_g2 = st.columns(2)
-        neden_col = [c for c in df.columns if "NEDEN" in c.upper()]
-        parca_col = [c for c in df.columns if "PARCA" in c.upper() or "PARÇA" in c.upper()]
 
         with col_g1:
             st.subheader("📌 Ret Nedenleri Dağılımı")
             if neden_col and ret_col:
-                ret_by_reason = df.groupby(neden_col[0])[ret_col[0]].sum().reset_index()
-                st.bar_chart(data=ret_by_reason, x=neden_col[0], y=ret_col[0])
+                ret_by_reason = df.groupby(neden_col)[ret_col].sum().reset_index()
+                st.bar_chart(data=ret_by_reason, x=neden_col, y=ret_col)
 
         with col_g2:
             st.subheader("🧩 Parça Bazlı Ret Adetleri")
             if parca_col and ret_col:
-                ret_by_part = df.groupby(parca_col[0])[ret_col[0]].sum().reset_index()
-                st.bar_chart(data=ret_by_part, x=parca_col[0], y=ret_col[0])
+                ret_by_part = df.groupby(parca_col)[ret_col].sum().reset_index()
+                st.bar_chart(data=ret_by_part, x=parca_col, y=ret_col)
 
         st.subheader("📋 Tüm Ham Veri Tablosu")
         st.dataframe(df, use_container_width=True)
@@ -371,24 +378,17 @@ with sekme_raporlar:
     st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
     st.caption("Aşağıdaki analiz özeti doğrudan üst yönetime sunulabilecek formatta hazırlanmıştır.")
 
-    df = verileri_yukle()
     if not df.empty:
-        neden_col = [c for c in df.columns if "NEDEN" in c.upper()]
-        parca_col = [c for c in df.columns if "PARCA" in c.upper() or "PARÇA" in c.upper()]
-        personel_col = [c for c in df.columns if "PERSONEL" in c.upper()]
-        ret_col = [c for c in df.columns if "RET" in c.upper() and "MIKTAR" in c.upper()]
-        uretim_col = [c for c in df.columns if "URETIM" in c.upper() and "MIKTAR" in c.upper()]
-
         st.subheader("📊 Yönetim Özet Tablosu")
         
         if parca_col and ret_col and uretim_col:
-            ozet_df = df.groupby(parca_col[0]).agg({
-                uretim_col[0]: "sum",
-                ret_col[0]: "sum"
+            ozet_df = df.groupby(parca_col).agg({
+                uretim_col: "sum",
+                ret_col: "sum"
             }).reset_index()
             
-            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_col[0]] / ozet_df[uretim_col[0]]) * 100, 2)
-            ozet_df["PPM"] = round((ozet_df[ret_col[0]] / ozet_df[uretim_col[0]]) * 1000000, 0)
+            ozet_df["Hata Oranı (%)"] = round((ozet_df[ret_col] / ozet_df[uretim_col]) * 100, 2)
+            ozet_df["PPM"] = round((ozet_df[ret_col] / ozet_df[uretim_col]) * 1000000, 0)
             ozet_df = ozet_df.fillna(0)
             
             st.dataframe(ozet_df, use_container_width=True)
@@ -402,6 +402,19 @@ with sekme_raporlar:
                 label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
                 data=buffer.getvalue(),
                 file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        else:
+            # Sütun ismi eşleşmezse tüm tabloyu direkt göster
+            st.dataframe(df, use_container_width=True)
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                df.to_excel(writer, sheet_name="Kalite_Verileri", index=False)
+            st.download_button(
+                label="📥 Raporu Excel (.xlsx) Olarak İndir",
+                data=buffer.getvalue(),
+                file_name=f"Kalite_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
