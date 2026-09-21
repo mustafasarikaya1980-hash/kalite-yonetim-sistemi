@@ -86,7 +86,7 @@ if "form_key" not in st.session_state:
 if "mesaj" not in st.session_state:
     st.session_state.mesaj = None
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
     try:
         df = pd.read_csv(CSV_URL)
@@ -95,7 +95,7 @@ def verileri_yukle():
     except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def ekstra_liste_yukle():
     try:
         df = pd.read_csv(CSV2_URL)
@@ -173,14 +173,6 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
     except Exception as e:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
-
-# GÜVENLİ SÜTUN BULUCU
-def sutun_isimi_getir(df, kelimeler):
-    for c in df.columns:
-        c_str = str(c).strip().upper()
-        if any(k.upper() in c_str for k in kelimeler):
-            return c
-    return None
 
 # HEADER
 st.markdown(
@@ -272,29 +264,34 @@ with sekme_yonetici:
 
     df = verileri_yukle()
     if not df.empty:
-        # SÜTUN TESPİTLERİ (Çok Esnek Arama)
-        ret_c = sutun_isimi_getir(df, ["RET ADEDİ", "RET ADEDI", "RET MİKTARI", "RET MIKTARI", "RET"])
-        uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM", "MIKTAR"])
-        parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
-        neden_c = sutun_isimi_getir(df, ["RET NEDENİ", "RET NEDENI", "NEDEN"])
+        # SÜTUNLARIN TAM İSİMLERİNİ BULDURUYORUZ
+        sutunlar = {str(c).strip().lower(): c for c in df.columns}
+        
+        # Kesin Sütun Yakalama
+        ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
+        uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
+        parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
+        neden_col = next((v for k, v in sutunlar.items() if "ret nedeni" in k or "neden" in k), None)
 
-        # Sayısal Dönüştürme
-        if ret_c:
-            df["_RET_SAYI"] = pd.to_numeric(df[ret_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        # SAYISAL DÖNÜŞTÜRME (Metin/Virgül hatalarını sıfırlamadan zorla çevirir)
+        if ret_col:
+            df["_RET"] = df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
+            df["_RET"] = pd.to_numeric(df["_RET"], errors="coerce").fillna(0).astype(float)
         else:
-            df["_RET_SAYI"] = 0
+            df["_RET"] = 0.0
 
-        if uretim_c:
-            df["_URETIM_SAYI"] = pd.to_numeric(df[uretim_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        if uretim_col:
+            df["_URETIM"] = df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
+            df["_URETIM"] = pd.to_numeric(df["_URETIM"], errors="coerce").fillna(0).astype(float)
         else:
-            df["_URETIM_SAYI"] = 0
+            df["_URETIM"] = 0.0
 
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         toplam_kayit = len(df)
-        toplam_ret = int(df["_RET_SAYI"].sum())
-        toplam_uretim = int(df["_URETIM_SAYI"].sum())
+        toplam_ret = int(df["_RET"].sum())
+        toplam_uretim = int(df["_URETIM"].sum())
         genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
         col_m2.metric("Toplam Üretim Adedi", f"{toplam_uretim:,}")
         col_m3.metric("Toplam Ret Adedi", f"{toplam_ret:,}")
@@ -306,32 +303,44 @@ with sekme_yonetici:
 
         with col_g1:
             st.subheader("📌 Ret Nedenleri Dağılımı")
-            if neden_c:
-                ret_by_reason = df.groupby(df[neden_c].astype(str), as_index=False)["_RET_SAYI"].sum()
-                ret_by_reason.columns = ["Nedeni", "Adet"]
+            if neden_col:
+                ret_by_reason = df.groupby(df[neden_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
+                ret_by_reason.columns = ["Ret Nedeni", "Adet"]
+                ret_by_reason = ret_by_reason[ret_by_reason["Ret Nedeni"] != "nan"]
                 
                 chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
-                    x=alt.X("Nedeni:N", title="Ret Nedeni", sort="-y"),
-                    y=alt.Y("Adet:Q", title="Ret Adedi"),
-                    tooltip=["Nedeni", "Adet"]
+                    x=alt.X("Ret Nedeni:N", title="Ret Nedeni", sort="-y", axis=alt.Axis(labelAngle=0)),
+                    y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
+                    tooltip=["Ret Nedeni", "Adet"]
                 ).properties(height=320)
-                st.altair_chart(chart_reason, use_container_width=True)
+                
+                text_reason = chart_reason.mark_text(
+                    align='center', baseline='bottom', dy=-3, color='black'
+                ).encode(text='Adet:Q')
+
+                st.altair_chart(chart_reason + text_reason, use_container_width=True)
 
         with col_g2:
             st.subheader("🧩 Parça Bazlı Ret Adetleri")
-            if parca_c:
-                ret_by_part = df.groupby(df[parca_c].astype(str), as_index=False)["_RET_SAYI"].sum()
-                ret_by_part.columns = ["Parca", "Adet"]
+            if parca_col:
+                ret_by_part = df.groupby(df[parca_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
+                ret_by_part.columns = ["Parça Adı", "Adet"]
+                ret_by_part = ret_by_part[ret_by_part["Parça Adı"] != "nan"]
 
                 chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
-                    x=alt.X("Parca:N", title="Parça Adı", sort="-y"),
-                    y=alt.Y("Adet:Q", title="Ret Adedi"),
-                    tooltip=["Parca", "Adet"]
+                    x=alt.X("Parça Adı:N", title="Parça Adı", sort="-y", axis=alt.Axis(labelAngle=0)),
+                    y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
+                    tooltip=["Parça Adı", "Adet"]
                 ).properties(height=320)
-                st.altair_chart(chart_part, use_container_width=True)
+
+                text_part = chart_part.mark_text(
+                    align='center', baseline='bottom', dy=-3, color='black'
+                ).encode(text='Adet:Q')
+
+                st.altair_chart(chart_part + text_part, use_container_width=True)
 
         st.subheader("📋 Tüm Ham Veri Tablosu")
-        st.dataframe(df.drop(columns=["_RET_SAYI", "_URETIM_SAYI"], errors="ignore"), use_container_width=True)
+        st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
     else:
         st.info("Henüz tabloya kaydedilmiş veri bulunmuyor.")
 
@@ -342,17 +351,19 @@ with sekme_raporlar:
 
     df = verileri_yukle()
     if not df.empty:
-        st.subheader("📊 Yönetim Özet Tablosu")
-        
-        ret_c = sutun_isimi_getir(df, ["RET ADEDİ", "RET ADEDI", "RET MİKTARI", "RET MIKTARI", "RET"])
-        uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
-        parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
+        sutunlar = {str(c).strip().lower(): c for c in df.columns}
+        ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
+        uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
+        parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
 
-        if parca_c:
+        if parca_col:
+            df["_RET"] = pd.to_numeric(df[ret_col].astype(str).str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if ret_col else 0
+            df["_URETIM"] = pd.to_numeric(df[uretim_col].astype(str).str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if uretim_col else 0
+
             temp_df = pd.DataFrame({
-                "Parça Adı": df[parca_c].astype(str),
-                "Toplam Üretim": pd.to_numeric(df[uretim_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0) if uretim_c else 0,
-                "Toplam Ret": pd.to_numeric(df[ret_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0) if ret_c else 0
+                "Parça Adı": df[parca_col].astype(str),
+                "Toplam Üretim": df["_URETIM"],
+                "Toplam Ret": df["_RET"]
             })
 
             ozet_df = temp_df.groupby("Parça Adı", as_index=False).agg({
