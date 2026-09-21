@@ -80,24 +80,11 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXf
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
-# SESSION STATE BAŞLATMA
-_varsayilanlar = {
-    "key_personel": "-- Seçiniz --",
-    "key_parca": "-- Seçiniz --",
-    "key_ret_nedeni": "-- Seçiniz --",
-    "key_op_adi": "",
-    "key_cnc_no": "",
-    "key_aciklama": "",
-    "key_ret_miktari": 0,
-    "key_uretim_miktari": 0,
-    "key_belgeler": [],
-    "mesaj": None,
-    "key_yeni_personel_ayarlar": "",
-    "key_yeni_parca_ayarlar": "",
-}
-for _k, _v in _varsayilanlar.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
+# SESSION STATE BAŞLATMA VE FORM ANAHTARI CONTROLİ
+if "form_key" not in st.session_state:
+    st.session_state.form_key = 0
+if "mesaj" not in st.session_state:
+    st.session_state.mesaj = None
 
 @st.cache_data(ttl=10, show_spinner=False)
 def verileri_yukle():
@@ -106,7 +93,6 @@ def verileri_yukle():
         df = df.dropna(how="all")
         return df
     except Exception as e:
-        st.session_state["_son_okuma_hatasi"] = str(e)
         return pd.DataFrame()
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -188,72 +174,6 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
-def kaydet_ve_sifirla():
-    personel = st.session_state.get("key_personel", "-- Seçiniz --")
-    parca = st.session_state.get("key_parca", "-- Seçiniz --")
-    ret_nedeni = st.session_state.get("key_ret_nedeni", "-- Seçiniz --")
-    aciklama = st.session_state.get("key_aciklama", "")
-    ret_miktari = st.session_state.get("key_ret_miktari", 0)
-    uretim_miktari = st.session_state.get("key_uretim_miktari", 0)
-
-    if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
-        st.session_state.mesaj = ("warning", "⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
-        return
-
-    if ret_nedeni == "OPRT. HATASI":
-        op_adi = st.session_state.get("key_op_adi", "")
-        cnc_no = st.session_state.get("key_cnc_no", "")
-    else:
-        op_adi = ""
-        cnc_no = ""
-
-    yuklenen_dosyalar = st.session_state.get("key_belgeler", [])
-
-    belge_linkleri = dosyalari_yukle(yuklenen_dosyalar)
-    if belge_linkleri is None:
-        return
-
-    kayit = {
-        "personel": personel,
-        "parca": parca,
-        "ret_nedeni": ret_nedeni,
-        "op_adi": op_adi,
-        "cnc_no": cnc_no,
-        "aciklama": aciklama,
-        "ret_miktari": ret_miktari,
-        "uretim_miktari": uretim_miktari,
-        "belge_linkleri": ", ".join(belge_linkleri),
-    }
-
-    basarili = veri_kaydet(kayit)
-    if basarili:
-        st.session_state.key_personel = "-- Seçiniz --"
-        st.session_state.key_parca = "-- Seçiniz --"
-        st.session_state.key_ret_nedeni = "-- Seçiniz --"
-        st.session_state.key_op_adi = ""
-        st.session_state.key_cnc_no = ""
-        st.session_state.key_aciklama = ""
-        st.session_state.key_ret_miktari = 0
-        st.session_state.key_uretim_miktari = 0
-        st.session_state.key_belgeler = []
-        belge_sayisi = len(belge_linkleri)
-        ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
-        st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
-
-def personel_ekle(kaynak_key: str):
-    yeni = st.session_state.get(kaynak_key, "").strip()
-    if not yeni: return
-    if kalici_liste_ekle("PERSONEL", yeni):
-        st.session_state[kaynak_key] = ""
-        st.session_state.mesaj = ("success", f"✅ '{yeni}' eklendi!")
-
-def parca_ekle(kaynak_key: str):
-    yeni = st.session_state.get(kaynak_key, "").strip()
-    if not yeni: return
-    if kalici_liste_ekle("PARCA", yeni):
-        st.session_state[kaynak_key] = ""
-        st.session_state.mesaj = ("success", f"✅ '{yeni}' eklendi!")
-
 # GÜVENLİ SÜTUN BULUCU
 def sutun_isimi_getir(df, kelimeler):
     for c in df.columns:
@@ -291,33 +211,56 @@ with sekme_saha:
         elif m_tur == "success": st.success(m_metin)
         st.session_state.mesaj = None
 
-    tum_personeller = ekstra_personeller
-    st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + tum_personeller, key="key_personel")
+    fk = st.session_state.form_key
 
-    tum_parcalar = ekstra_parcalar
-    st.selectbox("Parça Seçin", ["-- Seçiniz --"] + tum_parcalar, key="key_parca")
+    personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
+    parca = st.selectbox("Parça Seçin", ["-- Seçiniz --"] + ekstra_parcalar, key=f"parca_{fk}")
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
-    ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key="key_ret_nedeni")
+    ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
 
+    op_adi = ""
+    cnc_no = ""
     if ret_nedeni == "OPRT. HATASI":
         st.info("ℹ️ Operatör hatası seçildi. Lütfen operatör adını ve CNC'yi giriniz.")
-        st.text_input("OPERATÖRÜN ADI", placeholder="Örn: MELİH ÇAKILLI", key="key_op_adi")
-        st.text_input("CNC NO", placeholder="Örn: CNC5", key="key_cnc_no")
+        op_adi = st.text_input("OPERATÖRÜN ADI", placeholder="Örn: MELİH ÇAKILLI", key=f"op_adi_{fk}")
+        cnc_no = st.text_input("CNC NO", placeholder="Örn: CNC5", key=f"cnc_no_{fk}")
 
-    st.text_input("RET AÇIKLAMASI (Manuel Detay Giriniz)", placeholder="Örn: ÖLÇÜ DÜŞÜK", key="key_aciklama")
+    aciklama = st.text_input("RET AÇIKLAMASI (Manuel Detay Giriniz)", placeholder="Örn: ÖLÇÜ DÜŞÜK", key=f"aciklama_{fk}")
 
-    st.file_uploader(
+    yuklenen_dosyalar = st.file_uploader(
         "📎 BELGE / FOTOĞRAF EKLE (Birden fazla dosya seçebilirsiniz)",
         type=["png", "jpg", "jpeg", "pdf"],
         accept_multiple_files=True,
-        key="key_belgeler",
+        key=f"belgeler_{fk}",
     )
 
-    st.number_input("RET ADEDİ", min_value=0, step=1, key="key_ret_miktari")
-    st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key="key_uretim_miktari")
+    ret_miktari = st.number_input("RET ADEDİ", min_value=0, step=1, key=f"ret_miktari_{fk}")
+    uretim_miktari = st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key=f"uretim_miktari_{fk}")
 
-    st.button("KAYDET VE GÖNDER", use_container_width=True, on_click=kaydet_ve_sifirla)
+    if st.button("KAYDET VE GÖNDER", use_container_width=True):
+        if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
+            st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
+        else:
+            belge_linkleri = dosyalari_yukle(yuklenen_dosyalar) if yuklenen_dosyalar else []
+            if belge_linkleri is not None:
+                kayit = {
+                    "personel": personel,
+                    "parca": parca,
+                    "ret_nedeni": ret_nedeni,
+                    "op_adi": op_adi,
+                    "cnc_no": cnc_no,
+                    "aciklama": aciklama,
+                    "ret_miktari": ret_miktari,
+                    "uretim_miktari": uretim_miktari,
+                    "belge_linkleri": ", ".join(belge_linkleri),
+                }
+                if veri_kaydet(kayit):
+                    st.session_state.form_key += 1
+                    belge_sayisi = len(belge_linkleri)
+                    ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
+                    st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
+                    st.rerun()
 
 # --- 2. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
@@ -453,13 +396,21 @@ with sekme_ayarlar:
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         st.subheader("👤 Yeni Personel Ekle")
-        st.text_input("Personel Adı Soyadı", key="key_yeni_personel_ayarlar")
-        st.button("Personel Ekle", key="btn_personel_ekle_ayarlar", on_click=personel_ekle, args=("key_yeni_personel_ayarlar",))
+        yeni_p = st.text_input("Personel Adı Soyadı", key="yeni_p_input")
+        if st.button("Personel Ekle", key="btn_p_ekle"):
+            if yeni_p.strip():
+                if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
+                    st.success(f"✅ '{yeni_p.strip()}' eklendi!")
+                    st.rerun()
         if ekstra_personeller:
             st.caption("Mevcut Personeller: " + ", ".join(ekstra_personeller))
     with col_p2:
         st.subheader("🧩 Yeni Parça Ekle")
-        st.text_input("Parça Adı", key="key_yeni_parca_ayarlar")
-        st.button("Parça Ekle", key="btn_parca_ekle_ayarlar", on_click=parca_ekle, args=("key_yeni_parca_ayarlar",))
+        yeni_parca = st.text_input("Parça Adı", key="yeni_parca_input")
+        if st.button("Parça Ekle", key="btn_parca_ekle"):
+            if yeni_parca.strip():
+                if kalici_liste_ekle("PARCA", yeni_parca.strip()):
+                    st.success(f"✅ '{yeni_parca.strip()}' eklendi!")
+                    st.rerun()
         if ekstra_parcalar:
             st.caption("Mevcut Parçalar: " + ", ".join(ekstra_parcalar))
