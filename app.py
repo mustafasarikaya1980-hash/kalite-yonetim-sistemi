@@ -4,6 +4,7 @@ import io
 import streamlit as st
 import pandas as pd
 import requests
+import altair as alt
 from datetime import datetime
 
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
@@ -80,7 +81,6 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXf
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
-# SESSION STATE BAŞLATMA VE FORM ANAHTARI CONTROLİ
 if "form_key" not in st.session_state:
     st.session_state.form_key = 0
 if "mesaj" not in st.session_state:
@@ -92,7 +92,7 @@ def verileri_yukle():
         df = pd.read_csv(CSV_URL)
         df = df.dropna(how="all")
         return df
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -272,21 +272,27 @@ with sekme_yonetici:
 
     df = verileri_yukle()
     if not df.empty:
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        toplam_kayit = len(df)
-        
+        # SÜTUN TESPİTLERİ (Çok Esnek Arama)
         ret_c = sutun_isimi_getir(df, ["RET ADEDİ", "RET ADEDI", "RET MİKTARI", "RET MIKTARI", "RET"])
-        uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
+        uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM", "MIKTAR"])
         parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
         neden_c = sutun_isimi_getir(df, ["RET NEDENİ", "RET NEDENI", "NEDEN"])
 
-        toplam_ret = 0
-        toplam_uretim = 0
+        # Sayısal Dönüştürme
         if ret_c:
-            toplam_ret = int(pd.to_numeric(df[ret_c], errors="coerce").fillna(0).sum())
-        if uretim_c:
-            toplam_uretim = int(pd.to_numeric(df[uretim_c], errors="coerce").fillna(0).sum())
+            df["_RET_SAYI"] = pd.to_numeric(df[ret_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        else:
+            df["_RET_SAYI"] = 0
 
+        if uretim_c:
+            df["_URETIM_SAYI"] = pd.to_numeric(df[uretim_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        else:
+            df["_URETIM_SAYI"] = 0
+
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        toplam_kayit = len(df)
+        toplam_ret = int(df["_RET_SAYI"].sum())
+        toplam_uretim = int(df["_URETIM_SAYI"].sum())
         genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
         col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
@@ -300,32 +306,32 @@ with sekme_yonetici:
 
         with col_g1:
             st.subheader("📌 Ret Nedenleri Dağılımı")
-            if neden_c and ret_c:
-                try:
-                    temp_df = pd.DataFrame({
-                        "Nedeni": df[neden_c].astype(str),
-                        "Adet": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
-                    })
-                    ret_by_reason = temp_df.groupby("Nedeni", as_index=False)["Adet"].sum()
-                    st.bar_chart(data=ret_by_reason, x="Nedeni", y="Adet")
-                except Exception as ex:
-                    st.warning(f"Grafik çizdirilemedi: {ex}")
+            if neden_c:
+                ret_by_reason = df.groupby(df[neden_c].astype(str), as_index=False)["_RET_SAYI"].sum()
+                ret_by_reason.columns = ["Nedeni", "Adet"]
+                
+                chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
+                    x=alt.X("Nedeni:N", title="Ret Nedeni", sort="-y"),
+                    y=alt.Y("Adet:Q", title="Ret Adedi"),
+                    tooltip=["Nedeni", "Adet"]
+                ).properties(height=320)
+                st.altair_chart(chart_reason, use_container_width=True)
 
         with col_g2:
             st.subheader("🧩 Parça Bazlı Ret Adetleri")
-            if parca_c and ret_c:
-                try:
-                    temp_df = pd.DataFrame({
-                        "Parca": df[parca_c].astype(str),
-                        "Adet": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
-                    })
-                    ret_by_part = temp_df.groupby("Parca", as_index=False)["Adet"].sum()
-                    st.bar_chart(data=ret_by_part, x="Parca", y="Adet")
-                except Exception as ex:
-                    st.warning(f"Grafik çizdirilemedi: {ex}")
+            if parca_c:
+                ret_by_part = df.groupby(df[parca_c].astype(str), as_index=False)["_RET_SAYI"].sum()
+                ret_by_part.columns = ["Parca", "Adet"]
+
+                chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
+                    x=alt.X("Parca:N", title="Parça Adı", sort="-y"),
+                    y=alt.Y("Adet:Q", title="Ret Adedi"),
+                    tooltip=["Parca", "Adet"]
+                ).properties(height=320)
+                st.altair_chart(chart_part, use_container_width=True)
 
         st.subheader("📋 Tüm Ham Veri Tablosu")
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df.drop(columns=["_RET_SAYI", "_URETIM_SAYI"], errors="ignore"), use_container_width=True)
     else:
         st.info("Henüz tabloya kaydedilmiş veri bulunmuyor.")
 
@@ -342,47 +348,32 @@ with sekme_raporlar:
         uretim_c = sutun_isimi_getir(df, ["ÜRETİM MİKTARI", "URETIM MIKTARI", "ÜRETİM ADEDİ", "URETIM"])
         parca_c = sutun_isimi_getir(df, ["PARÇA", "PARCA"])
 
-        if parca_c and ret_c and uretim_c:
-            try:
-                temp_df = pd.DataFrame({
-                    "Parça Adı": df[parca_c].astype(str),
-                    "Toplam Üretim": pd.to_numeric(df[uretim_c], errors="coerce").fillna(0),
-                    "Toplam Ret": pd.to_numeric(df[ret_c], errors="coerce").fillna(0)
-                })
+        if parca_c:
+            temp_df = pd.DataFrame({
+                "Parça Adı": df[parca_c].astype(str),
+                "Toplam Üretim": pd.to_numeric(df[uretim_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0) if uretim_c else 0,
+                "Toplam Ret": pd.to_numeric(df[ret_c].astype(str).str.replace(",", "."), errors="coerce").fillna(0) if ret_c else 0
+            })
 
-                ozet_df = temp_df.groupby("Parça Adı", as_index=False).agg({
-                    "Toplam Üretim": "sum",
-                    "Toplam Ret": "sum"
-                })
-                
-                ozet_df["Hata Oranı (%)"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 100, 2)
-                ozet_df["PPM"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 1000000, 0)
-                
-                st.dataframe(ozet_df, use_container_width=True)
+            ozet_df = temp_df.groupby("Parça Adı", as_index=False).agg({
+                "Toplam Üretim": "sum",
+                "Toplam Ret": "sum"
+            })
+            
+            ozet_df["Hata Oranı (%)"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 100, 2)
+            ozet_df["PPM"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 1000000, 0)
+            
+            st.dataframe(ozet_df, use_container_width=True)
 
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                    ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
-                    df.to_excel(writer, sheet_name="Ham_Veriler", index=False)
-                
-                st.download_button(
-                    label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
-                    data=buffer.getvalue(),
-                    file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            except Exception as ex:
-                st.dataframe(df, use_container_width=True)
-        else:
-            st.dataframe(df, use_container_width=True)
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                df.to_excel(writer, sheet_name="Kalite_Verileri", index=False)
+                ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
+                df.to_excel(writer, sheet_name="Ham_Veriler", index=False)
+            
             st.download_button(
-                label="📥 Raporu Excel (.xlsx) Olarak İndir",
+                label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
                 data=buffer.getvalue(),
-                file_name=f"Kalite_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
+                file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
