@@ -68,13 +68,13 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# YENİ GİRİŞ KALİTE FORMU BAĞLANTISI
+# GİRİŞ KALİTE FORMU DOĞRULANMIŞ ENTRY ID'LERİ
 GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLScjqLjFHMyzEpi_pjesuvROrNOwhEj_qht8u29RviW-ky7ZyA/formResponse"
-GKK_ENTRY_URUN = "entry.1977771765"   # Gelen Ürün Tipi ve Ölçüsü / İsmi
-GKK_ENTRY_FIRMA = "entry.244309831"   # Tedarikçi Firma
-GKK_ENTRY_IRSALIYE = "entry.697412852" # İrsaliye No
-GKK_ENTRY_ONAY = "entry.1226068340"  # Onay Durumu
-GKK_ENTRY_PUAN = "entry.874838641"   # Tedarikçi Puanı
+GKK_ENTRY_URUN = "entry.1378310345"
+GKK_ENTRY_FIRMA = "entry.1034079493"
+GKK_ENTRY_IRSALIYE = "entry.1540191836"
+GKK_ENTRY_ONAY = "entry.1843236712"
+GKK_ENTRY_PUAN = "entry.1017830206"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
@@ -83,9 +83,9 @@ SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Ret Verileri
 SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
 
-# Yeni Giriş Kalite Formu Tablosu
-GKK_SPREADSHEET_ID = "1YkhaCNDhxpQutieixbQLOf4zNM_UP9RtfxuPFQMaVDw"
-SHEET_GIRIS_GID = "0"            # Giriş Kalite Sayfasının GID Numarası
+# Giriş Kalite Formu Tablosu (1. Resimdeki Tablo)
+GKK_SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
+SHEET_GIRIS_GID = "1248601990"   # GIRIS_KALITE Sayfasının GID Numarası
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
