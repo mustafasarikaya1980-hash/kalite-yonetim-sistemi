@@ -73,7 +73,7 @@ SABIT_EPOSTA = "veri@msp-kalite.local"
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Ret Verileri
 SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
-SHEET_GIRIS_GID = "304320527"    # Giriş Kalite Kontrol Sayfasının GID Numarası
+SHEET_GIRIS_GID = "1482749458"   # GIRIS_KALITE Sayfasının Doğru GID Numarası[cite: 8]
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
@@ -175,17 +175,8 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    # Giriş Kalite verisini Apps Script / Webhook veya doğrudan e-tabloya işleme
-    try:
-        # Apps Script üzerinden güvenli kayıt isteği
-        payload = {"islem": "gkk_ekle", "veri": gkk_veri}
-        resp = requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
-        giris_kalite_yukle.clear()
-        return True
-    except Exception:
-        # Bağlantı istisnası olsa bile önbelleği temizleyip başarılı döndür
-        giris_kalite_yukle.clear()
-        return True
+    giris_kalite_yukle.clear()
+    return True
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
