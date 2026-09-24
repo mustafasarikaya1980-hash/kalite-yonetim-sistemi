@@ -174,6 +174,9 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
+def turkce_kucuk(metin):
+    return str(metin).replace("İ", "i").replace("I", "ı").lower()
+
 # HEADER
 st.markdown(
     """
@@ -207,15 +210,31 @@ with sekme_saha:
 
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
 
-    # PARÇA SEÇİMİ: TEK KUTU İÇİNDE MANUEL YAZMA VE ANLIK FİLTRELEME
-    parca = st.selectbox(
-        "Parça Seçin (Tıklayıp doğrudan yazabilirsiniz)",
-        options=["-- Seçiniz --"] + ekstra_parcalar,
-        index=0,
-        key=f"parca_{fk}",
-        placeholder="Parça adı yazın veya listeden seçin...",
-        help="Kutunun içine tıklayıp parça adını yazmaya başladığınızda liste otomatik filtrelenecektir."
+    # MOBİL UYUMLU PARÇA ARAMA & SEÇİM YAPISI
+    st.markdown("**Parça Seçin**")
+    parca_arama = st.text_input(
+        "Parça Arama", 
+        placeholder="Aramak için buraya yazın (Klavyeyi açar)...", 
+        label_visibility="collapsed",
+        key=f"parca_arama_{fk}"
     )
+
+    if parca_arama.strip():
+        arama_kucuk = turkce_kucuk(parca_arama.strip())
+        sartli_parcalar = [p for p in ekstra_parcalar if arama_kucuk in turkce_kucuk(p)]
+    else:
+        sartli_parcalar = ekstra_parcalar
+
+    if not sartli_parcalar and parca_arama.strip():
+        st.caption("⚠️ Aranan kritere uygun parça bulunamadı.")
+        parca = "-- Seçiniz --"
+    else:
+        parca = st.selectbox(
+            "Uygun Parçayı Seçin",
+            ["-- Seçiniz --"] + sartli_parcalar,
+            label_visibility="collapsed",
+            key=f"parca_select_{fk}"
+        )
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
