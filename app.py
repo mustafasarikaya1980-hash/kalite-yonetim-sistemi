@@ -10,7 +10,7 @@ from datetime import datetime
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
 # TARAYICI OTOMATİK ÇEVİRİ ENGELİ
-st.components.v1.html(
+st.html(
     """
     <script>
         try {
@@ -20,8 +20,7 @@ st.components.v1.html(
             doc.setAttribute('translate', 'no');
         } catch (e) {}
     </script>
-    """,
-    height=0,
+    """
 )
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
@@ -53,7 +52,6 @@ st.markdown(
 # ==============================================================================
 # AYARLAR & GOOGLE BAĞLANTILARI
 # ==============================================================================
-# 1. SAHA RET FORMU
 FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
 ENTRY_PERSONEL = "entry.1505600207"
 ENTRY_PARCA = "entry.1034697779"
@@ -65,34 +63,16 @@ ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
 ENTRY_BELGE_LINKLERI = "entry.795755675"
 
-# 2. AYARLAR / DİNAMİK LİSTE FORMU
 FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT_EMRb_NHZsbcpMk-ZZmu0sQflfC_tt_A/formResponse"
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
-
-# 3. GİRİŞ KALİTE KONTROL FORMU (Google Form üzerinden gönderilecekse BURAYA EKLENECEK ENTRY ID'LER)
-# Not: Eğer Apps Script Web App ile doğrudan Tabloya yazdırıyorsanız APPS_SCRIPT_URL de kullanılabilir.
-FORM_GKK_RESPONSE_URL = "BURAYA_GKK_FORM_RESPONSE_URL_GELECEK"
-ENTRY_GKK_TARIH = "entry.000000000"
-ENTRY_GKK_URUN = "entry.000000000"
-ENTRY_GKK_FIRMA = "entry.000000000"
-ENTRY_GKK_IRSALIYE = "entry.000000000"
-ENTRY_GKK_MIKTAR = "entry.000000000"
-ENTRY_GKK_BIRIM = "entry.000000000"
-ENTRY_GKK_NUMUNE = "entry.000000000"
-ENTRY_GKK_RED_NUMUNE = "entry.000000000"
-ENTRY_GKK_FREKANS = "entry.000000000"
-ENTRY_GKK_ONAY = "entry.000000000"
-ENTRY_GKK_RAPOR_NO = "entry.000000000"
-ENTRY_GKK_ACIKLAMA = "entry.000000000"
-ENTRY_GKK_PUAN = "entry.000000000"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"        # Saha Ret Verileri
 SHEET2_GID = "1493441004"       # Ekstra Personel / Parça Listeleri
-SHEET_GIRIS_GID = "304320527"   # Giriş Kalite Kontrol Sayfasının GID Numarası
+SHEET_GIRIS_GID = "1482749458"    # Giriş Kalite Kontrol Sayfasının GID Numarası (Güncellendi)
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
@@ -192,50 +172,25 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    """Giriş Kalite Kontrol verisini Google Sheets'e gönderir (Form veya Apps Script üzerinden)."""
-    # EĞER APPS SCRIPT ÜZERİNDEN DOĞRUDAN SAYFAYA YAZIYORSANIZ:
-    if APPS_SCRIPT_URL and "BURAYA" not in APPS_SCRIPT_URL:
-        try:
-            payload = {"action": "gkk_ekle", "sheet_gid": SHEET_GIRIS_GID, "data": gkk_veri}
-            resp = requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
-            if resp.status_code == 200:
-                giris_kalite_yukle.clear()
-                return True
-        except Exception as e:
-            st.error(f"❌ Apps Script bağlantı hatası: {e}")
-            return False
-
-    # ALTERNATİF: GOOGLE FORM İLE GÖNDERİM
-    if "BURAYA" not in FORM_GKK_RESPONSE_URL:
+    if not APPS_SCRIPT_URL or "BURAYA" in APPS_SCRIPT_URL:
+        st.error("❌ Apps Script URL ayarlanmamış.")
+        return False
+    try:
         payload = {
-            ENTRY_GKK_TARIH: gkk_veri["tarih"],
-            ENTRY_GKK_URUN: gkk_veri["urun"],
-            ENTRY_GKK_FIRMA: gkk_veri["firma"],
-            ENTRY_GKK_IRSALIYE: gkk_veri["irsaliye"],
-            ENTRY_GKK_MIKTAR: gkk_veri["miktar"],
-            ENTRY_GKK_BIRIM: gkk_veri["birim"],
-            ENTRY_GKK_NUMUNE: gkk_veri["numune"],
-            ENTRY_GKK_RED_NUMUNE: gkk_veri["red_numune"],
-            ENTRY_GKK_FREKANS: gkk_veri["frekans"],
-            ENTRY_GKK_ONAY: gkk_veri["onay"],
-            ENTRY_GKK_RAPOR_NO: gkk_veri["rapor_no"],
-            ENTRY_GKK_ACIKLAMA: gkk_veri["aciklama"],
-            ENTRY_GKK_PUAN: gkk_veri["tedarikci_puani"],
-            "emailAddress": SABIT_EPOSTA,
+            "action": "gkk_ekle",
+            "data": gkk_veri
         }
-        try:
-            resp = requests.post(FORM_GKK_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
-            if resp.status_code in (200, 302):
-                giris_kalite_yukle.clear()
-                return True
-        except Exception as e:
-            st.error(f"❌ GKK Form gönderim hatası: {e}")
+        resp = requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=20)
+        sonuc = resp.json()
+        if sonuc.get("success"):
+            giris_kalite_yukle.clear()
+            return True
+        else:
+            st.error(f"❌ Veri kaydedilemedi: {sonuc.get('error')}")
             return False
-
-    # Google Form URL henüz girilmediyse kullanıcıyı uyarıp lokal simülasyon sunar:
-    st.warning("⚠️ Giriş Kalite Google Form URL'si henüz ayarlanmadığı için veri yalnızca sayfada yenilendi.")
-    giris_kalite_yukle.clear()
-    return True
+    except Exception as e:
+        st.error(f"❌ Kayıt sırasında bağlantı hatası oluştu: {e}")
+        return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
@@ -314,7 +269,7 @@ with sekme_saha:
     ret_miktari = st.number_input("RET ADEDİ", min_value=0, step=1, key=f"ret_miktari_{fk}")
     uretim_miktari = st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key=f"uretim_miktari_{fk}")
 
-    if st.button("KAYDET VE GÖNDER", use_container_width=True):
+    if st.button("KAYDET VE GÖNDER", width="stretch"):
         if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
             st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         else:
@@ -380,7 +335,7 @@ with sekme_giris:
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 1)
         st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
 
-    if st.button("GİRİŞ KALİTE KAYDINI KAYDET", use_container_width=True):
+    if st.button("GİRİŞ KALİTE KAYDINI KAYDET", width="stretch"):
         if not gkk_urun or not gkk_firma:
             st.warning("⚠️ Lütfen Gelen Ürün Tipi ve Tedarikçi Firma alanlarını doldurunuz!")
         else:
@@ -474,7 +429,7 @@ with sekme_yonetici:
                         align='center', baseline='bottom', dy=-3, color='black'
                     ).encode(text='Adet:Q')
 
-                    st.altair_chart(chart_reason + text_reason, use_container_width=True)
+                    st.altair_chart(chart_reason + text_reason, width="stretch")
 
             with col_g2:
                 st.subheader("🧩 Parça Bazlı Ret Adetleri")
@@ -498,10 +453,10 @@ with sekme_yonetici:
                         align='center', baseline='bottom', dy=-3, color='black'
                     ).encode(text='Adet:Q')
 
-                    st.altair_chart(chart_part + text_part, use_container_width=True)
+                    st.altair_chart(chart_part + text_part, width="stretch")
 
             st.subheader("📋 Tüm Saha Ham Veri Tablosu")
-            st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
+            st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), width="stretch")
         else:
             st.info("Henüz tabloya kaydedilmiş saha verisi bulunmuyor.")
 
@@ -547,7 +502,7 @@ with sekme_yonetici:
                         tooltip=["Onay Durumu", "Sayı"]
                     ).properties(height=340)
 
-                    st.altair_chart(donut_chart, use_container_width=True)
+                    st.altair_chart(donut_chart, width="stretch")
 
             with col_chart2:
                 st.subheader("🏢 Tedarikçi Kontrol Dağılımı")
@@ -561,10 +516,10 @@ with sekme_yonetici:
                         tooltip=["Tedarikçi", "Parti Sayısı"]
                     ).properties(height=340)
 
-                    st.altair_chart(firma_chart, use_container_width=True)
+                    st.altair_chart(firma_chart, width="stretch")
 
             st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
-            st.dataframe(df_gkk, use_container_width=True)
+            st.dataframe(df_gkk, width="stretch")
         else:
             st.info("Giriş Kalite Kontrol verisi bekleniyor. Sayfada başlıklar ve yeni veriler girildikçe dinamik grafikler otomatik olarak güncellenecektir.")
 
@@ -598,7 +553,7 @@ with sekme_raporlar:
             ozet_df["Hata Oranı (%)"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 100, 2)
             ozet_df["PPM"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 1000000, 0)
             
-            st.dataframe(ozet_df, use_container_width=True)
+            st.dataframe(ozet_df, width="stretch")
 
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -610,7 +565,7 @@ with sekme_raporlar:
                 data=buffer.getvalue(),
                 file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                width="stretch"
             )
     else:
         st.info("Rapor oluşturmak için veri bulunamadı.")
