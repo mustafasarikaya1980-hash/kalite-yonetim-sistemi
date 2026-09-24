@@ -25,7 +25,7 @@ st.components.v1.html(
 )
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
-# GÖRSEL CSS İYİLEŞTİRMELERİ
+# GÖRSEL VE MOBİL CSS İYİLEŞTİRMELERİ
 st.markdown(
     """
     <style>
@@ -45,6 +45,11 @@ st.markdown(
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, textarea { border-radius: 10px !important; }
     div[data-testid="stButton"] button { border-radius: 10px; font-weight: 600; padding: 0.6rem 1rem; }
     div.block-container { padding-top: 1.2rem; }
+    
+    /* MOBİL KLAVYE VE ODAKLANMA DÜZELTMESİ */
+    div[data-baseweb="select"] input {
+        inputmode: text !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -174,9 +179,6 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
-def turkce_kucuk(metin):
-    return str(metin).replace("İ", "i").replace("I", "ı").lower()
-
 # HEADER
 st.markdown(
     """
@@ -210,31 +212,15 @@ with sekme_saha:
 
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
 
-    # MOBİL & MASAÜSTÜ BİREBİR YAZARAK FİLTRELEME SİSTEMİ
-    st.write("**Parça Seçin**")
-    parca_girdisi = st.text_input(
-        "Parça Seçin", 
-        placeholder="Parça adı yazın (mobilde klavyeyi otomatik açar)...", 
-        label_visibility="collapsed",
-        key=f"parca_input_{fk}"
+    # TEK KUTULU MOBİL UYUMLU PARÇA SEÇİMİ
+    parca = st.selectbox(
+        "Parça Seçin",
+        options=["-- Seçiniz --"] + ekstra_parcalar,
+        index=0,
+        key=f"parca_{fk}",
+        placeholder="Aramak veya seçmek için tıklayın...",
+        help="Yazmaya başladığınızda liste filtrelenir."
     )
-
-    if parca_girdisi.strip():
-        arama_kucuk = turkce_kucuk(parca_girdisi.strip())
-        sartli_parcalar = [p for p in ekstra_parcalar if arama_kucuk in turkce_kucuk(p)]
-    else:
-        sartli_parcalar = ekstra_parcalar
-
-    if sartli_parcalar:
-        parca = st.selectbox(
-            "Uygun Parça Listesi",
-            options=sartli_parcalar,
-            label_visibility="collapsed",
-            key=f"parca_select_{fk}"
-        )
-    else:
-        st.caption("⚠️ Yazdığınız ifadeye uygun parça bulunamadı.")
-        parca = "-- Seçiniz --"
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
