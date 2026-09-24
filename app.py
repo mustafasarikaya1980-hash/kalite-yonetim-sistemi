@@ -76,7 +76,7 @@ SHEET_GID = "1834241278"         # Saha Ret Verileri
 SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
 
 # Yeni Giriş Kalite Formu Tablosu
-GKK_SPREADSHEET_ID = "1YkhaCNDhxpQutieixbQLOf4zNM_UP9RtfxuPFQMaVDw"[cite: 8]
+GKK_SPREADSHEET_ID = "1YkhaCNDhxpQutieixbQLOf4zNM_UP9RtfxuPFQMaVDw"
 SHEET_GIRIS_GID = "0"            # Giriş Kalite Sayfasının GID Numarası
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
