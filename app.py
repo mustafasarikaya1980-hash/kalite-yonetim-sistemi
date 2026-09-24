@@ -68,6 +68,14 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
+# YENİ GİRİŞ KALİTE FORMU BAĞLANTISI
+GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLScjqLjFHMyzEpi_pjesuvROrNOwhEj_qht8u29RviW-ky7ZyA/formResponse"
+GKK_ENTRY_URUN = "entry.1977771765"   # Gelen Ürün Tipi ve Ölçüsü / İsmi
+GKK_ENTRY_FIRMA = "entry.244309831"   # Tedarikçi Firma
+GKK_ENTRY_IRSALIYE = "entry.697412852" # İrsaliye No
+GKK_ENTRY_ONAY = "entry.1226068340"  # Onay Durumu
+GKK_ENTRY_PUAN = "entry.874838641"   # Tedarikçi Puanı
+
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
 # Saha Verileri Tablosu
@@ -179,14 +187,24 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
+    payload = {
+        GKK_ENTRY_URUN: gkk_veri["urun"],
+        GKK_ENTRY_FIRMA: gkk_veri["firma"],
+        GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
+        GKK_ENTRY_ONAY: gkk_veri["onay"],
+        GKK_ENTRY_PUAN: str(gkk_veri["tedarikci_puani"]),
+        "emailAddress": SABIT_EPOSTA,
+    }
     try:
-        payload = {"islem": "gkk_ekle_yeni", "spreadsheetId": GKK_SPREADSHEET_ID, "veri": gkk_veri}
-        requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
-        giris_kalite_yukle.clear()
-        return True
-    except Exception:
-        giris_kalite_yukle.clear()
-        return True
+        resp = requests.post(GKK_FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
+        if resp.status_code in (200, 302):
+            giris_kalite_yukle.clear()
+            return True
+        st.error(f"❌ Giriş Kalite Formu'na gönderilirken hata alındı (kod: {resp.status_code}).")
+        return False
+    except Exception as e:
+        st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
+        return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
@@ -321,7 +339,7 @@ with sekme_giris:
     st.markdown("---")
     col_gkk3, col_gkk4 = st.columns(2)
     with col_gkk3:
-        gkk_onay = st.selectbox("Onay Durumu / Approval Condition", ["KABUL", "ŞARTLI KABUL", "RED", "KABUL/RED"], key=f"gkk_onay_{gkk_fk}")
+        gkk_onay = st.selectbox("Onay Durumu / Approval Condition", ["KABUL", "ŞARTLI KABUL", "RED"], key=f"gkk_onay_{gkk_fk}")
         gkk_rapor_no = st.text_input("Rapor No (Varsa)", placeholder="Örn: KK2-260035", key=f"gkk_rapor_no_{gkk_fk}")
         gkk_aciklama = st.text_area("Ek Açıklama / Additional Explanation", placeholder="Örn: ÇAPAK VAR RAPOR YAZILMADI", key=f"gkk_aciklama_{gkk_fk}")
 
@@ -356,7 +374,7 @@ with sekme_giris:
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
-                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi!"
+                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla Google E-Tablonuza kaydedildi!"
                 st.rerun()
 
 # --- 3. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
@@ -495,8 +513,8 @@ with sekme_yonetici:
                             field="Onay Durumu", 
                             type="nominal",
                             scale=alt.Scale(
-                                domain=['KABUL', 'ŞARTLI KABUL', 'RED', 'KABUL/RED'],
-                                range=['#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
+                                domain=['KABUL', 'ŞARTLI KABUL', 'RED'],
+                                range=['#10B981', '#F59E0B', '#EF4444']
                             )
                         ),
                         tooltip=["Onay Durumu", "Sayı"]
