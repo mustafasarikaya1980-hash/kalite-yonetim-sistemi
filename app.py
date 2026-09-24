@@ -73,7 +73,7 @@ SABIT_EPOSTA = "veri@msp-kalite.local"
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Ret Verileri
 SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
-SHEET_GIRIS_GID = "0"            # GIRIS_KALITE Sayfasının GID Numarası (E-Tablodaki URL'den güncelleyebilirsiniz)
+SHEET_GIRIS_GID = "0"            # GIRIS_KALITE Sayfasının GID Numarası
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
@@ -173,7 +173,6 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    # GKK Verisi kaydetme (Ayrı Google Form veya Apps Script üzerinden)
     st.info("ℹ️ Giriş Kalite Verisi kaydedildi. (E-Tablo entegrasyonu aktif)")
     giris_kalite_yukle.clear()
     return True
@@ -279,7 +278,7 @@ with sekme_saha:
                     st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
                     st.rerun()
 
-# --- 2. SEKME: GİRİŞ KALİTE KONTROL (YENİ SEKMELER) ---
+# --- 2. SEKME: GİRİŞ KALİTE KONTROL ---
 with sekme_giris:
     st.header("📦 Giriş Kalite Kontrol Takip Formu")
     st.caption("Tedarikçi firmalardan gelen hammadde ve yarı mamullerin kontrol veri girişi")
@@ -354,102 +353,166 @@ with sekme_yonetici:
         giris_kalite_yukle.clear()
         st.rerun()
 
-    df = verileri_yukle()
-    if not df.empty:
-        sutunlar = {str(c).strip().lower(): c for c in df.columns}
-        
-        ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
-        uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
-        parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
-        neden_col = next((v for k, v in sutunlar.items() if "ret nedeni" in k or "neden" in k), None)
+    # YÖNETİCİ PANELİ İÇİNDE İKİ ALT BÖLÜM: SAHA VE GİRİŞ KALİTE
+    alt_sekme1, alt_sekme2 = st.tabs(["⚙️ SAHA KALİTE ANALİZLERİ", "📦 GİRİŞ KALİTE & TEDARİKÇİ ROL ANALİZLERİ"])
 
-        if ret_col:
-            df["_RET"] = df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
-            df["_RET"] = pd.to_numeric(df["_RET"], errors="coerce").fillna(0).astype(float)
+    with alt_sekme1:
+        df = verileri_yukle()
+        if not df.empty:
+            sutunlar = {str(c).strip().lower(): c for c in df.columns}
+            
+            ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
+            uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
+            parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
+            neden_col = next((v for k, v in sutunlar.items() if "ret nedeni" in k or "neden" in k), None)
+
+            if ret_col:
+                df["_RET"] = df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
+                df["_RET"] = pd.to_numeric(df["_RET"], errors="coerce").fillna(0).astype(float)
+            else:
+                df["_RET"] = 0.0
+
+            if uretim_col:
+                df["_URETIM"] = df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
+                df["_URETIM"] = pd.to_numeric(df["_URETIM"], errors="coerce").fillna(0).astype(float)
+            else:
+                df["_URETIM"] = 0.0
+
+            toplam_kayit = len(df)
+            toplam_ret = int(df["_RET"].sum())
+            toplam_uretim = int(df["_URETIM"].sum())
+            genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            col_m1.metric("Toplam Saha Kontrol Kaydı", f"{toplam_kayit} Adet")
+            col_m2.metric("Toplam Üretim Adedi", f"{toplam_uretim:,}")
+            col_m3.metric("Toplam Ret Adedi", f"{toplam_ret:,}")
+            col_m4.metric("Genel Hata Oranı (PPM)", f"{genel_ppm:,}")
+
+            st.markdown("---")
+            
+            col_g1, col_g2 = st.columns(2)
+
+            with col_g1:
+                st.subheader("📌 Ret Nedenleri Dağılımı")
+                if neden_col:
+                    ret_by_reason = df.groupby(df[neden_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
+                    ret_by_reason.columns = ["Ret Nedeni", "Adet"]
+                    ret_by_reason = ret_by_reason[ret_by_reason["Ret Nedeni"] != "nan"]
+                    
+                    chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
+                        x=alt.X(
+                            "Ret Nedeni:N", 
+                            title="Ret Nedeni", 
+                            sort="-y", 
+                            axis=alt.Axis(labelAngle=-45, labelOverlap=False, labelLimit=150)
+                        ),
+                        y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
+                        tooltip=["Ret Nedeni", "Adet"]
+                    ).properties(height=340)
+                    
+                    text_reason = chart_reason.mark_text(
+                        align='center', baseline='bottom', dy=-3, color='black'
+                    ).encode(text='Adet:Q')
+
+                    st.altair_chart(chart_reason + text_reason, use_container_width=True)
+
+            with col_g2:
+                st.subheader("🧩 Parça Bazlı Ret Adetleri")
+                if parca_col:
+                    ret_by_part = df.groupby(df[parca_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
+                    ret_by_part.columns = ["Parça Adı", "Adet"]
+                    ret_by_part = ret_by_part[ret_by_part["Parça Adı"] != "nan"]
+
+                    chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
+                        x=alt.X(
+                            "Parça Adı:N", 
+                            title="Parça Adı", 
+                            sort="-y", 
+                            axis=alt.Axis(labelAngle=-45, labelOverlap=False, labelLimit=150)
+                        ),
+                        y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
+                        tooltip=["Parça Adı", "Adet"]
+                    ).properties(height=340)
+
+                    text_part = chart_part.mark_text(
+                        align='center', baseline='bottom', dy=-3, color='black'
+                    ).encode(text='Adet:Q')
+
+                    st.altair_chart(chart_part + text_part, use_container_width=True)
+
+            st.subheader("📋 Tüm Saha Ham Veri Tablosu")
+            st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
         else:
-            df["_RET"] = 0.0
+            st.info("Henüz tabloya kaydedilmiş saha verisi bulunmuyor.")
 
-        if uretim_col:
-            df["_URETIM"] = df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
-            df["_URETIM"] = pd.to_numeric(df["_URETIM"], errors="coerce").fillna(0).astype(float)
+    # GİRİŞ KALİTE GRAFİKLERİ VE AFİLLİ RAPORLAMA
+    with alt_sekme2:
+        df_gkk = giris_kalite_yukle()
+        if not df_gkk.empty:
+            gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
+            
+            col_onay = next((v for k, v in gkk_cols.items() if "onay" in k), None)
+            col_firma = next((v for k, v in gkk_cols.items() if "firma" in k or "tedarikçi" in k or "company" in k), None)
+            col_puan = next((v for k, v in gkk_cols.items() if "puan" in k or "değerlendirme" in k), None)
+            col_red_num = next((v for k, v in gkk_cols.items() if "red" in k and "numune" in k), None)
+
+            # METRİKLER
+            toplam_gkk_kayit = len(df_gkk)
+            kabul_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper() == "KABUL"]) if col_onay else 0
+            sartli_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper() == "ŞARTLI KABUL"]) if col_onay else 0
+            red_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper() == "RED"]) if col_onay else 0
+
+            m_g1, m_g2, m_g3, m_g4 = st.columns(4)
+            m_g1.metric("Toplam Gelen İrsaliye/Parti", f"{toplam_gkk_kayit} Parti")
+            m_g2.metric("✅ Kabul Edilen", f"{kabul_sayisi} Parti")
+            m_g3.metric("⚠️ Şartlı Kabul", f"{sartli_sayisi} Parti")
+            m_g4.metric("❌ Red Edilen", f"{red_sayisi} Parti")
+
+            st.markdown("---")
+
+            col_chart1, col_chart2 = st.columns(2)
+
+            with col_chart1:
+                st.subheader("📊 Onay Durumu Dağılımı (Kabul / Şartlı / Red)")
+                if col_onay:
+                    onay_df = df_gkk[col_onay].value_counts().reset_index()
+                    onay_df.columns = ["Onay Durumu", "Sayı"]
+
+                    # DONUT PASTA GRAFİĞİ
+                    donut_chart = alt.Chart(onay_df).mark_arc(innerRadius=60).encode(
+                        theta=alt.Theta(field="Sayı", type="quantitative"),
+                        color=alt.Color(
+                            field="Onay Durumu", 
+                            type="nominal",
+                            scale=alt.Scale(
+                                domain=['KABUL', 'ŞARTLI KABUL', 'RED', 'KABUL/RED'],
+                                range=['#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
+                            )
+                        ),
+                        tooltip=["Onay Durumu", "Sayı"]
+                    ).properties(height=340)
+
+                    st.altair_chart(donut_chart, use_container_width=True)
+
+            with col_chart2:
+                st.subheader("🏢 Tedarikçi Bazında Giriş Kontrol Dağılımı")
+                if col_firma:
+                    firma_df = df_gkk[col_firma].value_counts().reset_index()
+                    firma_df.columns = ["Tedarikçi", "Parti Sayısı"]
+
+                    firma_chart = alt.Chart(firma_df).mark_bar(color="#6366F1").encode(
+                        x=alt.X("Parti Sayısı:Q", title="Gelen Parti Sayısı"),
+                        y=alt.Y("Tedarikçi:N", sort="-x", title="Tedarikçi Firma"),
+                        tooltip=["Tedarikçi", "Parti Sayısı"]
+                    ).properties(height=340)
+
+                    st.altair_chart(firma_chart, use_container_width=True)
+
+            st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
+            st.dataframe(df_gkk, use_container_width=True)
         else:
-            df["_URETIM"] = 0.0
-
-        toplam_kayit = len(df)
-        toplam_ret = int(df["_RET"].sum())
-        toplam_uretim = int(df["_URETIM"].sum())
-        genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
-
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Toplam Saha Kontrol Kaydı", f"{toplam_kayit} Adet")
-        col_m2.metric("Toplam Üretim Adedi", f"{toplam_uretim:,}")
-        col_m3.metric("Toplam Ret Adedi", f"{toplam_ret:,}")
-        col_m4.metric("Genel Hata Oranı (PPM)", f"{genel_ppm:,}")
-
-        st.markdown("---")
-        
-        col_g1, col_g2 = st.columns(2)
-
-        with col_g1:
-            st.subheader("📌 Ret Nedenleri Dağılımı")
-            if neden_col:
-                ret_by_reason = df.groupby(df[neden_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
-                ret_by_reason.columns = ["Ret Nedeni", "Adet"]
-                ret_by_reason = ret_by_reason[ret_by_reason["Ret Nedeni"] != "nan"]
-                
-                chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
-                    x=alt.X(
-                        "Ret Nedeni:N", 
-                        title="Ret Nedeni", 
-                        sort="-y", 
-                        axis=alt.Axis(
-                            labelAngle=-45,
-                            labelOverlap=False,
-                            labelLimit=150
-                        )
-                    ),
-                    y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
-                    tooltip=["Ret Nedeni", "Adet"]
-                ).properties(height=340)
-                
-                text_reason = chart_reason.mark_text(
-                    align='center', baseline='bottom', dy=-3, color='black'
-                ).encode(text='Adet:Q')
-
-                st.altair_chart(chart_reason + text_reason, use_container_width=True)
-
-        with col_g2:
-            st.subheader("🧩 Parça Bazlı Ret Adetleri")
-            if parca_col:
-                ret_by_part = df.groupby(df[parca_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
-                ret_by_part.columns = ["Parça Adı", "Adet"]
-                ret_by_part = ret_by_part[ret_by_part["Parça Adı"] != "nan"]
-
-                chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
-                    x=alt.X(
-                        "Parça Adı:N", 
-                        title="Parça Adı", 
-                        sort="-y", 
-                        axis=alt.Axis(
-                            labelAngle=-45,
-                            labelOverlap=False,
-                            labelLimit=150
-                        )
-                    ),
-                    y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
-                    tooltip=["Parça Adı", "Adet"]
-                ).properties(height=340)
-
-                text_part = chart_part.mark_text(
-                    align='center', baseline='bottom', dy=-3, color='black'
-                ).encode(text='Adet:Q')
-
-                st.altair_chart(chart_part + text_part, use_container_width=True)
-
-        st.subheader("📋 Tüm Saha Ham Veri Tablosu")
-        st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
-    else:
-        st.info("Henüz tabloya kaydedilmiş saha verisi bulunmuyor.")
+            st.info("Henüz Giriş Kalite Kontrol kaydı bulunmuyor. 'GİRİŞ KALİTE KONTROL' sekmesinden veri girişi yapabilirsiniz.")
 
 # --- 4. SEKME: ÜST YÖNETİM RAPORLARI ---
 with sekme_raporlar:
