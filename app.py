@@ -68,7 +68,7 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# GİRİŞ KALİTE FORMU DOĞRULANMIŞ ENTRY ID'LERİ
+# GİRİŞ KALİTE FORMU
 GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLScjqLjFHMyzEpi_pjesuvROrNOwhEj_qht8u29RviW-ky7ZyA/formResponse"
 GKK_ENTRY_URUN = "entry.1378310345"
 GKK_ENTRY_FIRMA = "entry.1034079493"
@@ -83,7 +83,7 @@ SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Ret Verileri
 SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
 
-# Giriş Kalite Formu Tablosu (1. Resimdeki Tablo)
+# Giriş Kalite Formu Tablosu
 GKK_SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GIRIS_GID = "1248601990"   # GIRIS_KALITE Sayfasının GID Numarası
 
@@ -140,9 +140,6 @@ def ekstra_liste_yukle():
 def dosyalari_yukle(dosyalar):
     if not dosyalar:
         return []
-    if not APPS_SCRIPT_URL or "BURAYA" in APPS_SCRIPT_URL:
-        st.error("❌ Belge yükleme adresi (Apps Script URL) henüz ayarlanmadı.")
-        return None
     payload_dosyalar = []
     for f in dosyalar:
         icerik = f.getvalue()
@@ -156,10 +153,8 @@ def dosyalari_yukle(dosyalar):
         sonuc = resp.json()
         if sonuc.get("success"):
             return sonuc.get("links", [])
-        st.error(f"❌ Belgeler yüklenirken hata oluştu: {sonuc.get('error', 'Bilinmeyen hata')}")
         return None
-    except Exception as e:
-        st.error(f"❌ Belgeler yüklenirken bağlantı hatası oluştu: {e}")
+    except Exception:
         return None
 
 def veri_kaydet(yeni_veri: dict) -> bool:
@@ -180,10 +175,8 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         if resp.status_code in (200, 302):
             verileri_yukle.clear()
             return True
-        st.error(f"❌ Google Form'a gönderilirken hata alındı (kod: {resp.status_code}).")
         return False
-    except Exception as e:
-        st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
+    except Exception:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
@@ -200,10 +193,8 @@ def giris_kalite_kaydet(gkk_veri: dict) -> bool:
         if resp.status_code in (200, 302):
             giris_kalite_yukle.clear()
             return True
-        st.error(f"❌ Giriş Kalite Formu'na gönderilirken hata alındı (kod: {resp.status_code}).")
         return False
-    except Exception as e:
-        st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
+    except Exception:
         return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
@@ -213,10 +204,8 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         if resp.status_code in (200, 302):
             ekstra_liste_yukle.clear()
             return True
-        st.error(f"❌ Kaydedilirken hata alındı (kod: {resp.status_code}).")
         return False
-    except Exception as e:
-        st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
+    except Exception:
         return False
 
 # HEADER
@@ -252,34 +241,18 @@ with sekme_saha:
     fk = st.session_state.form_key
 
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
-
-    parca = st.selectbox(
-        "Parça Seçin",
-        options=["-- Seçiniz --"] + ekstra_parcalar,
-        index=0,
-        key=f"parca_{fk}",
-        placeholder="Aramak veya seçmek için tıklayın..."
-    )
-
+    parca = st.selectbox("Parça Seçin", options=["-- Seçiniz --"] + ekstra_parcalar, index=0, key=f"parca_{fk}")
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
 
     op_adi = ""
     cnc_no = ""
     if ret_nedeni == "OPRT. HATASI":
-        st.info("ℹ️ Operatör hatası seçildi. Lütfen operatör adını ve CNC'yi giriniz.")
         op_adi = st.text_input("OPERATÖRÜN ADI", placeholder="Örn: MELİH ÇAKILLI", key=f"op_adi_{fk}")
         cnc_no = st.text_input("CNC NO", placeholder="Örn: CNC5", key=f"cnc_no_{fk}")
 
-    aciklama = st.text_input("RET AÇIKLAMASI (Manuel Detay Giriniz)", placeholder="Örn: ÖLÇÜ DÜŞÜK", key=f"aciklama_{fk}")
-
-    yuklenen_dosyalar = st.file_uploader(
-        "📎 BELGE / FOTOĞRAF EKLE (Birden fazla dosya seçebilirsiniz)",
-        type=["png", "jpg", "jpeg", "pdf"],
-        accept_multiple_files=True,
-        key=f"belgeler_{fk}",
-    )
-
+    aciklama = st.text_input("RET AÇIKLAMASI", placeholder="Örn: ÖLÇÜ DÜŞÜK", key=f"aciklama_{fk}")
+    yuklenen_dosyalar = st.file_uploader("📎 BELGE / FOTOĞRAF EKLE", type=["png", "jpg", "jpeg", "pdf"], accept_multiple_files=True, key=f"belgeler_{fk}")
     ret_miktari = st.number_input("RET ADEDİ", min_value=0, step=1, key=f"ret_miktari_{fk}")
     uretim_miktari = st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key=f"uretim_miktari_{fk}")
 
@@ -288,30 +261,22 @@ with sekme_saha:
             st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         else:
             belge_linkleri = dosyalari_yukle(yuklenen_dosyalar) if yuklenen_dosyalar else []
-            if belge_linkleri is not None:
-                kayit = {
-                    "personel": personel,
-                    "parca": parca,
-                    "ret_nedeni": ret_nedeni,
-                    "op_adi": op_adi,
-                    "cnc_no": cnc_no,
-                    "aciklama": aciklama,
-                    "ret_miktari": ret_miktari,
-                    "uretim_miktari": uretim_miktari,
-                    "belge_linkleri": ", ".join(belge_linkleri),
-                }
-                if veri_kaydet(kayit):
-                    st.session_state.form_key += 1
-                    belge_sayisi = len(belge_linkleri)
-                    ek_mesaj = f" ({belge_sayisi} belge eklendi.)" if belge_sayisi else ""
-                    st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
-                    st.rerun()
+            kayit = {
+                "personel": personel, "parca": parca, "ret_nedeni": ret_nedeni,
+                "op_adi": op_adi, "cnc_no": cnc_no, "aciklama": aciklama,
+                "ret_miktari": ret_miktari, "uretim_miktari": uretim_miktari,
+                "belge_linkleri": ", ".join(belge_linkleri) if belge_linkleri else "",
+            }
+            if veri_kaydet(kayit):
+                st.session_state.form_key += 1
+                st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
+                st.rerun()
+            else:
+                st.error("❌ Kayıt sırasında bir hata oluştu.")
 
 # --- 2. SEKME: GİRİŞ KALİTE KONTROL ---
 with sekme_giris:
     st.header("📦 Giriş Kalite Kontrol Takip Formu")
-    st.caption("Tedarikçi firmalardan gelen hammadde ve yarı mamullerin kontrol veri girişi")
-
     if st.session_state.gkk_mesaj:
         st.success(st.session_state.gkk_mesaj)
         st.session_state.gkk_mesaj = None
@@ -321,7 +286,7 @@ with sekme_giris:
     col_gkk1, col_gkk2 = st.columns(2)
     with col_gkk1:
         gkk_urun = st.text_input("Gelen Ürün Tipi ve Ölçüsü / İsmi", placeholder="Örn: 6\"x8\" KARBON BURÇ", key=f"gkk_urun_{gkk_fk}")
-        gkk_firma = st.text_input("Tedarikçi / Incoming Product Company", placeholder="Örn: SIRMA, ADD KAUÇUK", key=f"gkk_firma_{gkk_fk}")
+        gkk_firma = st.text_input("Tedarikçi / Incoming Product Company", placeholder="Örn: SIRMA", key=f"gkk_firma_{gkk_fk}")
         gkk_irsaliye = st.text_input("İrsaliye / Waybill No", placeholder="Örn: EFT2026000000008", key=f"gkk_irsaliye_{gkk_fk}")
         gkk_tarih = st.date_input("İrsaliye Tarihi", key=f"gkk_tarih_{gkk_fk}")
 
@@ -341,7 +306,7 @@ with sekme_giris:
     with col_gkk3:
         gkk_onay = st.selectbox("Onay Durumu / Approval Condition", ["KABUL", "ŞARTLI KABUL", "RED"], key=f"gkk_onay_{gkk_fk}")
         gkk_rapor_no = st.text_input("Rapor No (Varsa)", placeholder="Örn: KK2-260035", key=f"gkk_rapor_no_{gkk_fk}")
-        gkk_aciklama = st.text_area("Ek Açıklama / Additional Explanation", placeholder="Örn: ÇAPAK VAR RAPOR YAZILMADI", key=f"gkk_aciklama_{gkk_fk}")
+        gkk_aciklama = st.text_area("Ek Açıklama", placeholder="Açıklama giriniz...", key=f"gkk_aciklama_{gkk_fk}")
 
     with col_gkk4:
         st.subheader("⭐ Tedarikçi Değerlendirme Puanları (0-100)")
@@ -351,31 +316,25 @@ with sekme_giris:
         p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 80, key=f"p_etiket_{gkk_fk}")
         
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 1)
-        st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
+        st.metric("Genel Tedarikçi Puanı", f"{genel_puan}")
 
     if st.button("GİRİŞ KALİTE KAYDINI KAYDET", use_container_width=True):
         if not gkk_urun or not gkk_firma:
             st.warning("⚠️ Lütfen Gelen Ürün Tipi ve Tedarikçi Firma alanlarını doldurunuz!")
         else:
             gkk_kayit = {
-                "tarih": str(gkk_tarih),
-                "urun": gkk_urun,
-                "firma": gkk_firma,
-                "irsaliye": gkk_irsaliye,
-                "miktar": gkk_miktar,
-                "birim": gkk_birim,
-                "numune": gkk_numune,
-                "red_numune": gkk_red_numune,
-                "frekans": gkk_frekans,
-                "onay": gkk_onay,
-                "rapor_no": gkk_rapor_no,
-                "aciklama": gkk_aciklama,
+                "tarih": str(gkk_tarih), "urun": gkk_urun, "firma": gkk_firma,
+                "irsaliye": gkk_irsaliye, "miktar": gkk_miktar, "birim": gkk_birim,
+                "numune": gkk_numune, "red_numune": gkk_red_numune, "frekans": gkk_frekans,
+                "onay": gkk_onay, "rapor_no": gkk_rapor_no, "aciklama": gkk_aciklama,
                 "tedarikci_puani": genel_puan
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
-                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla Google E-Tablonuza kaydedildi!"
+                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi!"
                 st.rerun()
+            else:
+                st.error("❌ Kayıt sırasında hata oluştu.")
 
 # --- 3. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
@@ -392,23 +351,13 @@ with sekme_yonetici:
         df = verileri_yukle()
         if not df.empty:
             sutunlar = {str(c).strip().lower(): c for c in df.columns}
-            
             ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
             uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
             parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
             neden_col = next((v for k, v in sutunlar.items() if "ret nedeni" in k or "neden" in k), None)
 
-            if ret_col:
-                df["_RET"] = df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
-                df["_RET"] = pd.to_numeric(df["_RET"], errors="coerce").fillna(0).astype(float)
-            else:
-                df["_RET"] = 0.0
-
-            if uretim_col:
-                df["_URETIM"] = df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0]
-                df["_URETIM"] = pd.to_numeric(df["_URETIM"], errors="coerce").fillna(0).astype(float)
-            else:
-                df["_URETIM"] = 0.0
+            df["_RET"] = pd.to_numeric(df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if ret_col else 0.0
+            df["_URETIM"] = pd.to_numeric(df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if uretim_col else 0.0
 
             toplam_kayit = len(df)
             toplam_ret = int(df["_RET"].sum())
@@ -416,13 +365,12 @@ with sekme_yonetici:
             genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            col_m1.metric("Toplam Saha Kontrol Kaydı", f"{toplam_kayit} Adet")
-            col_m2.metric("Toplam Üretim Adedi", f"{toplam_uretim:,}")
-            col_m3.metric("Toplam Ret Adedi", f"{toplam_ret:,}")
-            col_m4.metric("Genel Hata Oranı (PPM)", f"{genel_ppm:,}")
+            col_m1.metric("Toplam Saha Kaydı", f"{toplam_kayit} Adet")
+            col_m2.metric("Toplam Üretim", f"{toplam_uretim:,}")
+            col_m3.metric("Toplam Ret", f"{toplam_ret:,}")
+            col_m4.metric("Genel PPM", f"{genel_ppm:,}")
 
             st.markdown("---")
-            
             col_g1, col_g2 = st.columns(2)
 
             with col_g1:
@@ -431,23 +379,11 @@ with sekme_yonetici:
                     ret_by_reason = df.groupby(df[neden_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
                     ret_by_reason.columns = ["Ret Nedeni", "Adet"]
                     ret_by_reason = ret_by_reason[ret_by_reason["Ret Nedeni"] != "nan"]
-                    
-                    chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
-                        x=alt.X(
-                            "Ret Nedeni:N", 
-                            title="Ret Nedeni", 
-                            sort="-y", 
-                            axis=alt.Axis(labelAngle=-45, labelOverlap=False, labelLimit=150)
-                        ),
-                        y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
-                        tooltip=["Ret Nedeni", "Adet"]
-                    ).properties(height=340)
-                    
-                    text_reason = chart_reason.mark_text(
-                        align='center', baseline='bottom', dy=-3, color='black'
-                    ).encode(text='Adet:Q')
-
-                    st.altair_chart(chart_reason + text_reason, use_container_width=True)
+                    if not ret_by_reason.empty:
+                        chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
+                            x=alt.X("Ret Nedeni:N", sort="-y"), y=alt.Y("Adet:Q"), tooltip=["Ret Nedeni", "Adet"]
+                        ).properties(height=340)
+                        st.altair_chart(chart_reason, use_container_width=True)
 
             with col_g2:
                 st.subheader("🧩 Parça Bazlı Ret Adetleri")
@@ -455,41 +391,32 @@ with sekme_yonetici:
                     ret_by_part = df.groupby(df[parca_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
                     ret_by_part.columns = ["Parça Adı", "Adet"]
                     ret_by_part = ret_by_part[ret_by_part["Parça Adı"] != "nan"]
+                    if not ret_by_part.empty:
+                        chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
+                            x=alt.X("Parça Adı:N", sort="-y"), y=alt.Y("Adet:Q"), tooltip=["Parça Adı", "Adet"]
+                        ).properties(height=340)
+                        st.altair_chart(chart_part, use_container_width=True)
 
-                    chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
-                        x=alt.X(
-                            "Parça Adı:N", 
-                            title="Parça Adı", 
-                            sort="-y", 
-                            axis=alt.Axis(labelAngle=-45, labelOverlap=False, labelLimit=150)
-                        ),
-                        y=alt.Y("Adet:Q", title="Ret Adedi", scale=alt.Scale(zero=True)),
-                        tooltip=["Parça Adı", "Adet"]
-                    ).properties(height=340)
-
-                    text_part = chart_part.mark_text(
-                        align='center', baseline='bottom', dy=-3, color='black'
-                    ).encode(text='Adet:Q')
-
-                    st.altair_chart(chart_part + text_part, use_container_width=True)
-
-            st.subheader("📋 Tüm Saha Ham Veri Tablosu")
             st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
         else:
-            st.info("Henüz tabloya kaydedilmiş saha verisi bulunmuyor.")
+            st.info("Saha verisi bulunmuyor.")
 
     with alt_sekme2:
         df_gkk = giris_kalite_yukle()
-        if not df_gkk.empty and len(df_gkk.columns) >= 1:
+        if not df_gkk.empty:
+            # Sütun isimlerini güvenli bulma
             gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
-            
             col_onay = next((v for k, v in gkk_cols.items() if "onay" in k), None)
             col_firma = next((v for k, v in gkk_cols.items() if "firma" in k or "tedarikçi" in k or "company" in k), None)
 
+            # Boş sütunları güvenli doldurma (görüntünün bozulmaması için)
+            for c in df_gkk.columns:
+                df_gkk[c] = df_gkk[c].fillna("Bilgi Yok")
+
             toplam_gkk_kayit = len(df_gkk)
-            kabul_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper() == "KABUL"]) if col_onay else 0
-            sartli_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper() == "ŞARTLI KABUL"]) if col_onay else 0
-            red_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper() == "RED"]) if col_onay else 0
+            kabul_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("KABUL", na=False)]) if col_onay else 0
+            sartli_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("ŞARTLI", na=False)]) if col_onay else 0
+            red_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("RED", na=False)]) if col_onay else 0
 
             m_g1, m_g2, m_g3, m_g4 = st.columns(4)
             m_g1.metric("Toplam Gelen Parti", f"{toplam_gkk_kayit} Parti")
@@ -498,118 +425,59 @@ with sekme_yonetici:
             m_g4.metric("❌ Red Edilen", f"{red_sayisi} Parti")
 
             st.markdown("---")
-
-            col_chart1, col_chart2 = st.columns(2)
+            col_chart1, col_chart2 = alt.selection_point(), st.columns(2)
 
             with col_chart1:
                 st.subheader("📊 Onay Durumu Dağılımı")
                 if col_onay:
                     onay_df = df_gkk[col_onay].value_counts().reset_index()
                     onay_df.columns = ["Onay Durumu", "Sayı"]
-
-                    donut_chart = alt.Chart(onay_df).mark_arc(innerRadius=60).encode(
-                        theta=alt.Theta(field="Sayı", type="quantitative"),
-                        color=alt.Color(
-                            field="Onay Durumu", 
-                            type="nominal",
-                            scale=alt.Scale(
-                                domain=['KABUL', 'ŞARTLI KABUL', 'RED'],
-                                range=['#10B981', '#F59E0B', '#EF4444']
-                            )
-                        ),
-                        tooltip=["Onay Durumu", "Sayı"]
-                    ).properties(height=340)
-
-                    st.altair_chart(donut_chart, use_container_width=True)
+                    if not onay_df.empty:
+                        donut_chart = alt.Chart(onay_df).mark_arc(innerRadius=60).encode(
+                            theta=alt.Theta(field="Sayı", type="quantitative"),
+                            color=alt.Color(field="Onay Durumu", type="nominal"),
+                            tooltip=["Onay Durumu", "Sayı"]
+                        ).properties(height=340)
+                        st.altair_chart(donut_chart, use_container_width=True)
 
             with col_chart2:
                 st.subheader("🏢 Tedarikçi Kontrol Dağılımı")
                 if col_firma:
                     firma_df = df_gkk[col_firma].value_counts().reset_index()
                     firma_df.columns = ["Tedarikçi", "Parti Sayısı"]
-
-                    firma_chart = alt.Chart(firma_df).mark_bar(color="#6366F1").encode(
-                        x=alt.X("Parti Sayısı:Q", title="Gelen Parti Sayısı"),
-                        y=alt.Y("Tedarikçi:N", sort="-x", title="Tedarikçi Firma"),
-                        tooltip=["Tedarikçi", "Parti Sayısı"]
-                    ).properties(height=340)
-
-                    st.altair_chart(firma_chart, use_container_width=True)
+                    if not firma_df.empty:
+                        firma_chart = alt.Chart(firma_df).mark_bar(color="#6366F1").encode(
+                            x=alt.X("Parti Sayısı:Q"), y=alt.Y("Tedarikçi:N", sort="-x"), tooltip=["Tedarikçi", "Parti Sayısı"]
+                        ).properties(height=340)
+                        st.altair_chart(firma_chart, use_container_width=True)
 
             st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
             st.dataframe(df_gkk, use_container_width=True)
         else:
-            st.info("Giriş Kalite Kontrol verisi bekleniyor. Sayfada başlıklar ve yeni veriler girildikçe dinamik grafikler otomatik olarak güncellenecektir.")
+            st.info("Giriş Kalite Kontrol tablosunda şu an veri görünmüyor.")
 
 # --- 4. SEKME: ÜST YÖNETİM RAPORLARI ---
 with sekme_raporlar:
     st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
-    st.caption("Aşağıdaki analiz özeti doğrudan üst yönetime sunulabilecek formatta hazırlanmıştır.")
-
     df = verileri_yukle()
     if not df.empty:
-        sutunlar = {str(c).strip().lower(): c for c in df.columns}
-        ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
-        uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
-        parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
-
-        if parca_col:
-            df["_RET"] = pd.to_numeric(df[ret_col].astype(str).str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if ret_col else 0
-            df["_URETIM"] = pd.to_numeric(df[uretim_col].astype(str).str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if uretim_col else 0
-
-            temp_df = pd.DataFrame({
-                "Parça Adı": df[parca_col].astype(str),
-                "Toplam Üretim": df["_URETIM"],
-                "Toplam Ret": df["_RET"]
-            })
-
-            ozet_df = temp_df.groupby("Parça Adı", as_index=False).agg({
-                "Toplam Üretim": "sum",
-                "Toplam Ret": "sum"
-            })
-            
-            ozet_df["Hata Oranı (%)"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 100, 2)
-            ozet_df["PPM"] = round((ozet_df["Toplam Ret"] / ozet_df["Toplam Üretim"].replace(0, 1)) * 1000000, 0)
-            
-            st.dataframe(ozet_df, use_container_width=True)
-
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                ozet_df.to_excel(writer, sheet_name="Yonetim_Ozeti", index=False)
-                df.to_excel(writer, sheet_name="Ham_Veriler", index=False)
-            
-            st.download_button(
-                label="📥 Üst Yönetim Raporunu Excel (.xlsx) Olarak İndir",
-                data=buffer.getvalue(),
-                file_name=f"Kalite_Yonetim_Raporu_{datetime.now().strftime('%Y_%m_%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+        st.dataframe(df, use_container_width=True)
     else:
-        st.info("Rapor oluşturmak için veri bulunamadı.")
+        st.info("Rapor verisi bulunamadı.")
 
 # --- 5. SEKME: AYARLAR ---
 with sekme_ayarlar:
     st.header("Personel ve Parça Listesini Yönet")
-    st.caption("Buradan eklediğiniz isimler kalıcıdır ve tüm cihazlar için ortaktır.")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        st.subheader("👤 Yeni Personel Ekle")
         yeni_p = st.text_input("Personel Adı Soyadı", key="yeni_p_input")
-        if st.button("Personel Ekle", key="btn_p_ekle"):
-            if yeni_p.strip():
-                if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
-                    st.success(f"✅ '{yeni_p.strip()}' eklendi!")
-                    st.rerun()
-        if ekstra_personeller:
-            st.caption("Mevcut Personeller: " + ", ".join(ekstra_personeller))
+        if st.button("Personel Ekle", key="btn_p_ekle") and yeni_p.strip():
+            if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
+                st.success("✅ Personel eklendi!")
+                st.rerun()
     with col_p2:
-        st.subheader("🧩 Yeni Parça Ekle")
         yeni_parca = st.text_input("Parça Adı", key="yeni_parca_input")
-        if st.button("Parça Ekle", key="btn_parca_ekle"):
-            if yeni_parca.strip():
-                if kalici_liste_ekle("PARCA", yeni_parca.strip()):
-                    st.success(f"✅ '{yeni_parca.strip()}' eklendi!")
-                    st.rerun()
-        if ekstra_parcalar:
-            st.caption("Mevcut Parçalar: " + ", ".join(ekstra_parcalar))
+        if st.button("Parça Ekle", key="btn_parca_ekle") and yeni_parca.strip():
+            if kalici_liste_ekle("PARCA", yeni_parca.strip()):
+                st.success("✅ Parça eklendi!")
+                st.rerun()
