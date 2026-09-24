@@ -210,31 +210,31 @@ with sekme_saha:
 
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
 
-    # MOBİL UYUMLU PARÇA ARAMA & SEÇİM YAPISI
-    st.markdown("**Parça Seçin**")
-    parca_arama = st.text_input(
-        "Parça Arama", 
-        placeholder="Aramak için buraya yazın (Klavyeyi açar)...", 
+    # MOBİL & MASAÜSTÜ BİREBİR YAZARAK FİLTRELEME SİSTEMİ
+    st.write("**Parça Seçin**")
+    parca_girdisi = st.text_input(
+        "Parça Seçin", 
+        placeholder="Parça adı yazın (mobilde klavyeyi otomatik açar)...", 
         label_visibility="collapsed",
-        key=f"parca_arama_{fk}"
+        key=f"parca_input_{fk}"
     )
 
-    if parca_arama.strip():
-        arama_kucuk = turkce_kucuk(parca_arama.strip())
+    if parca_girdisi.strip():
+        arama_kucuk = turkce_kucuk(parca_girdisi.strip())
         sartli_parcalar = [p for p in ekstra_parcalar if arama_kucuk in turkce_kucuk(p)]
     else:
         sartli_parcalar = ekstra_parcalar
 
-    if not sartli_parcalar and parca_arama.strip():
-        st.caption("⚠️ Aranan kritere uygun parça bulunamadı.")
-        parca = "-- Seçiniz --"
-    else:
+    if sartli_parcalar:
         parca = st.selectbox(
-            "Uygun Parçayı Seçin",
-            ["-- Seçiniz --"] + sartli_parcalar,
+            "Uygun Parça Listesi",
+            options=sartli_parcalar,
             label_visibility="collapsed",
             key=f"parca_select_{fk}"
         )
+    else:
+        st.caption("⚠️ Yazdığınız ifadeye uygun parça bulunamadı.")
+        parca = "-- Seçiniz --"
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
