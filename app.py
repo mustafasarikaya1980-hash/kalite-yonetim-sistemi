@@ -174,6 +174,10 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
+# TÜRKÇE HARF UYUMLU ARAMA YARDIMCISI
+def turkce_kucuk(metin):
+    return metin.replace("İ", "i").replace("I", "ı").lower()
+
 # HEADER
 st.markdown(
     """
@@ -206,7 +210,30 @@ with sekme_saha:
     fk = st.session_state.form_key
 
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
-    parca = st.selectbox("Parça Seçin", ["-- Seçiniz --"] + ekstra_parcalar, key=f"parca_{fk}")
+
+    # PARÇA CANLI ARAMA VE FİLTRELEME
+    arama_metni = st.text_input(
+        "🔍 Parça Adı / Kodu Ara",
+        placeholder="Örn: YATAK, 5, ARA...",
+        key=f"arama_parca_{fk}",
+        help="Aramak istediğiniz parçanın adını veya kodunu yazın, aşağıdaki liste otomatik süzülecektir."
+    )
+
+    if arama_metni.strip():
+        arama_kucuk = turkce_kucuk(arama_metni.strip())
+        filtrelenmis_parcalar = [p for p in ekstra_parcalar if arama_kucuk in turkce_kucuk(p)]
+    else:
+        filtrelenmis_parcalar = ekstra_parcalar
+
+    if not filtrelenmis_parcalar and arama_metni.strip():
+        st.warning("⚠️ Aradığınız kriterlere uygun parça bulunamadı.")
+        parca = "-- Seçiniz --"
+    else:
+        parca = st.selectbox(
+            f"Parça Seçin ({len(filtrelenmis_parcalar)} parça listelendi)",
+            ["-- Seçiniz --"] + filtrelenmis_parcalar,
+            key=f"parca_{fk}"
+        )
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
@@ -305,7 +332,6 @@ with sekme_yonetici:
                 ret_by_reason.columns = ["Ret Nedeni", "Adet"]
                 ret_by_reason = ret_by_reason[ret_by_reason["Ret Nedeni"] != "nan"]
                 
-                # labelAngle=-45 VE labelOverlap=False SAYESİNDE TELEFONDA DA MASAÜSTÜNDE DE HEPSİ EKSİKSİZ GÖRÜNÜR
                 chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
                     x=alt.X(
                         "Ret Nedeni:N", 
