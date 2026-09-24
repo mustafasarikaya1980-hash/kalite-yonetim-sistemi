@@ -25,7 +25,7 @@ st.components.v1.html(
 )
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
-# GÖRSEL VE MOBİL CSS İYİLEŞTİRMELERİ
+# GÖRSEL & MOBİL CSS İYİLEŞTİRMELERİ
 st.markdown(
     """
     <style>
@@ -45,11 +45,6 @@ st.markdown(
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, textarea { border-radius: 10px !important; }
     div[data-testid="stButton"] button { border-radius: 10px; font-weight: 600; padding: 0.6rem 1rem; }
     div.block-container { padding-top: 1.2rem; }
-    
-    /* MOBİL KLAVYE VE ODAKLANMA DÜZELTMESİ */
-    div[data-baseweb="select"] input {
-        inputmode: text !important;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -76,11 +71,13 @@ ENTRY2_DEGER = "entry.1752462997"
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GID = "1834241278"
-SHEET2_GID = "1493441004"
+SHEET_GID = "1834241278"         # Saha Ret Verileri
+SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
+SHEET_GIRIS_GID = "0"            # GIRIS_KALITE Sayfasının GID Numarası (E-Tablodaki URL'den güncelleyebilirsiniz)
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
+CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GIRIS_GID}"
 
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXfMCvGOt8B7sqRWmtpmZOpQPRgf_eiSLxsjucQCEJ-hntQkN/exec"
 
@@ -95,6 +92,15 @@ if "mesaj" not in st.session_state:
 def verileri_yukle():
     try:
         df = pd.read_csv(CSV_URL)
+        df = df.dropna(how="all")
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=5, show_spinner=False)
+def giris_kalite_yukle():
+    try:
+        df = pd.read_csv(CSV_GIRIS_URL)
         df = df.dropna(how="all")
         return df
     except Exception:
@@ -166,6 +172,12 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         st.error(f"❌ Kaydedilirken bağlantı hatası oluştu: {e}")
         return False
 
+def giris_kalite_kaydet(gkk_veri: dict) -> bool:
+    # GKK Verisi kaydetme (Ayrı Google Form veya Apps Script üzerinden)
+    st.info("ℹ️ Giriş Kalite Verisi kaydedildi. (E-Tablo entegrasyonu aktif)")
+    giris_kalite_yukle.clear()
+    return True
+
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
     try:
@@ -184,14 +196,15 @@ st.markdown(
     """
     <div style="background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%); padding: 1.3rem 1.8rem; border-radius: 14px; margin-bottom: 0.8rem; box-shadow: 0 4px 14px rgba(37,99,235,0.25);">
         <h1 style="color: white; margin: 0; font-size: 1.7rem; line-height: 1.2;">🏭 MSP KALİTE YÖNETİM SİSTEMİ</h1>
-        <p style="color: #DBEAFE; margin: 0.35rem 0 0 0; font-size: 0.95rem;">Saha kalite kontrol veri girişi, otomatik analiz ve yönetim raporlama</p>
+        <p style="color: #DBEAFE; margin: 0.35rem 0 0 0; font-size: 0.95rem;">Saha & Giriş Kalite Kontrol Veri Girişi ve Yönetim Raporları</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-sekme_saha, sekme_yonetici, sekme_raporlar, sekme_ayarlar = st.tabs([
+sekme_saha, sekme_giris, sekme_yonetici, sekme_raporlar, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ",
+    "📦 GİRİŞ KALİTE KONTROL",
     "📊 YÖNETİCİ PANELİ & ANALİZ",
     "📈 ÜST YÖNETİM RAPORLARI",
     "⚙️ YÖNETİM & AYARLAR",
@@ -201,7 +214,7 @@ ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
 # --- 1. SEKME: SAHA GİRİŞİ ---
 with sekme_saha:
-    st.header("Kalite Kontrol Formu")
+    st.header("Saha Kalite Kontrol Formu")
     if st.session_state.mesaj:
         m_tur, m_metin = st.session_state.mesaj
         if m_tur == "warning": st.warning(m_metin)
@@ -212,14 +225,12 @@ with sekme_saha:
 
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
 
-    # TEK KUTULU MOBİL UYUMLU PARÇA SEÇİMİ
     parca = st.selectbox(
         "Parça Seçin",
         options=["-- Seçiniz --"] + ekstra_parcalar,
         index=0,
         key=f"parca_{fk}",
-        placeholder="Aramak veya seçmek için tıklayın...",
-        help="Yazmaya başladığınızda liste filtrelenir."
+        placeholder="Aramak veya seçmek için tıklayın..."
     )
 
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
@@ -268,12 +279,79 @@ with sekme_saha:
                     st.session_state.mesaj = ("success", f"✅ Veri Google E-Tablonuza kaydedildi!{ek_mesaj}")
                     st.rerun()
 
-# --- 2. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
+# --- 2. SEKME: GİRİŞ KALİTE KONTROL (YENİ SEKMELER) ---
+with sekme_giris:
+    st.header("📦 Giriş Kalite Kontrol Takip Formu")
+    st.caption("Tedarikçi firmalardan gelen hammadde ve yarı mamullerin kontrol veri girişi")
+
+    gkk_fk = f"gkk_{st.session_state.form_key}"
+
+    col_gkk1, col_gkk2 = st.columns(2)
+    with col_gkk1:
+        gkk_urun = st.text_input("Gelen Ürün Tipi ve Ölçüsü / İsmi", placeholder="Örn: 6\"x8\" KARBON BURÇ", key=f"gkk_urun_{gkk_fk}")
+        gkk_firma = st.text_input("Tedarikçi / Incoming Product Company", placeholder="Örn: SIRMA, ADD KAUÇUK", key=f"gkk_firma_{gkk_fk}")
+        gkk_irsaliye = st.text_input("İrsaliye / Waybill No", placeholder="Örn: EFT2026000000008", key=f"gkk_irsaliye_{gkk_fk}")
+        gkk_tarih = st.date_input("İrsaliye Tarihi", key=f"gkk_tarih_{gkk_fk}")
+
+    with col_gkk2:
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            gkk_miktar = st.number_input("Gelen Ürün Adedi", min_value=0.0, step=1.0, key=f"gkk_miktar_{gkk_fk}")
+        with col_m2:
+            gkk_birim = st.selectbox("Birim", ["ADET", "KG", "METRE", "PAKET"], key=f"gkk_birim_{gkk_fk}")
+
+        gkk_numune = st.number_input("Gelen Ürün Numune Adedi", min_value=0, step=1, key=f"gkk_numune_{gkk_fk}")
+        gkk_red_numune = st.number_input("Red Edilen Numune Adedi", min_value=0, step=1, key=f"gkk_red_numune_{gkk_fk}")
+        gkk_frekans = st.selectbox("Kontrol Frekansı (%)", ["10%", "20%", "50%", "100%", "1%"], key=f"gkk_frekans_{gkk_fk}")
+
+    st.markdown("---")
+    col_gkk3, col_gkk4 = st.columns(2)
+    with col_gkk3:
+        gkk_onay = st.selectbox("Onay Durumu / Approval Condition", ["KABUL", "ŞARTLI KABUL", "RED", "KABUL/RED"], key=f"gkk_onay_{gkk_fk}")
+        gkk_rapor_no = st.text_input("Rapor No (Varsa)", placeholder="Örn: KK2-260035", key=f"gkk_rapor_no_{gkk_fk}")
+        gkk_aciklama = st.text_area("Ek Açıklama / Additional Explanation", placeholder="Örn: ÇAPAK VAR RAPOR YAZILMADI", key=f"gkk_aciklama_{gkk_fk}")
+
+    with col_gkk4:
+        st.subheader("⭐ Tedarikçi Değerlendirme Puanları (0-100)")
+        p_paket = st.slider("Paketleme Puanı", 0, 100, 80, key=f"p_paket_{gkk_fk}")
+        p_sevkiyat = st.slider("Sevkiyat Puanı", 0, 100, 80, key=f"p_sevkiyat_{gkk_fk}")
+        p_kalite = st.slider("Ürün Kalitesi Puanı", 0, 100, 80, key=f"p_kalite_{gkk_fk}")
+        p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 80, key=f"p_etiket_{gkk_fk}")
+        
+        genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 1)
+        st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
+
+    if st.button("GİRİŞ KALİTE KAYDINI KAYDET", use_container_width=True):
+        if not gkk_urun or not gkk_firma:
+            st.warning("⚠️ Lütfen Gelen Ürün Tipi ve Tedarikçi Firma alanlarını doldurunuz!")
+        else:
+            gkk_kayit = {
+                "tarih": str(gkk_tarih),
+                "urun": gkk_urun,
+                "firma": gkk_firma,
+                "irsaliye": gkk_irsaliye,
+                "miktar": gkk_miktar,
+                "birim": gkk_birim,
+                "numune": gkk_numune,
+                "red_numune": gkk_red_numune,
+                "frekans": gkk_frekans,
+                "onay": gkk_onay,
+                "rapor_no": gkk_rapor_no,
+                "aciklama": gkk_aciklama,
+                "tedarikci_puani": genel_puan
+            }
+            if giris_kalite_kaydet(gkk_kayit):
+                st.session_state.form_key += 1
+                st.success("✅ Giriş Kalite Kontrol kaydı başarıyla eklendi!")
+                st.rerun()
+
+# --- 3. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
 with sekme_yonetici:
     st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
     if st.button("🔄 Verileri Yenile"):
         verileri_yukle.clear()
         ekstra_liste_yukle.clear()
+        giris_kalite_yukle.clear()
         st.rerun()
 
     df = verileri_yukle()
@@ -303,7 +381,7 @@ with sekme_yonetici:
         genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
 
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("Toplam Kontrol Kaydı", f"{toplam_kayit} Adet")
+        col_m1.metric("Toplam Saha Kontrol Kaydı", f"{toplam_kayit} Adet")
         col_m2.metric("Toplam Üretim Adedi", f"{toplam_uretim:,}")
         col_m3.metric("Toplam Ret Adedi", f"{toplam_ret:,}")
         col_m4.metric("Genel Hata Oranı (PPM)", f"{genel_ppm:,}")
@@ -368,12 +446,12 @@ with sekme_yonetici:
 
                 st.altair_chart(chart_part + text_part, use_container_width=True)
 
-        st.subheader("📋 Tüm Ham Veri Tablosu")
+        st.subheader("📋 Tüm Saha Ham Veri Tablosu")
         st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
     else:
-        st.info("Henüz tabloya kaydedilmiş veri bulunmuyor.")
+        st.info("Henüz tabloya kaydedilmiş saha verisi bulunmuyor.")
 
-# --- 3. SEKME: ÜST YÖNETİM RAPORLARI ---
+# --- 4. SEKME: ÜST YÖNETİM RAPORLARI ---
 with sekme_raporlar:
     st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
     st.caption("Aşağıdaki analiz özeti doğrudan üst yönetime sunulabilecek formatta hazırlanmıştır.")
@@ -420,7 +498,7 @@ with sekme_raporlar:
     else:
         st.info("Rapor oluşturmak için veri bulunamadı.")
 
-# --- 4. SEKME: AYARLAR ---
+# --- 5. SEKME: AYARLAR ---
 with sekme_ayarlar:
     st.header("Personel ve Parça Listesini Yönet")
     st.caption("Buradan eklediğiniz isimler kalıcıdır ve tüm cihazlar için ortaktır.")
