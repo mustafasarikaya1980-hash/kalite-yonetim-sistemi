@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import base64
-import io
 import streamlit as st
 import pandas as pd
 import requests
@@ -69,15 +68,7 @@ SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         
 SHEET2_GID = "1493441004"        
 
-# Aktif Giriş Kalite Tablosu ve Sekme Adı
 GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
-GKK_SHEET_NAME = "GIRIS_KALITE"
-
-CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
-CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
-# Doğrudan sekme adına göre CSV export
-CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={GKK_SHEET_NAME}"
-
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
@@ -92,7 +83,7 @@ if "gkk_mesaj" not in st.session_state:
 @st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
     try:
-        df = pd.read_csv(CSV_URL)
+        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}")
         return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
@@ -100,15 +91,21 @@ def verileri_yukle():
 @st.cache_data(ttl=5, show_spinner=False)
 def giris_kalite_yukle():
     try:
-        df = pd.read_csv(CSV_GIRIS_URL)
-        return df.dropna(how="all")
+        resp = requests.get(APPS_SCRIPT_URL, headers=_HEADERS, timeout=15)
+        data = resp.json()
+        if data and len(data) > 1:
+            header = data[0]
+            rows = data[1:]
+            df = pd.DataFrame(rows, columns=header)
+            return df.dropna(how="all")
+        return pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 @st.cache_data(ttl=5, show_spinner=False)
 def ekstra_liste_yukle():
     try:
-        df = pd.read_csv(CSV2_URL)
+        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}")
         df = df.dropna(how="all")
         if df.empty or "Tip" not in df.columns or "Değer" not in df.columns:
             return [], []
