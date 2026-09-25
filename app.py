@@ -64,18 +64,11 @@ ENTRY2_DEGER = "entry.1752462997"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# Tablo Bağlantıları
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GID = "1834241278"         # Saha Ret Verileri
-SHEET2_GID = "1493441004"        # Ekstra Listeler
+SHEET_GID = "1834241278"         
+SHEET2_GID = "1493441004"        
 
 GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
-GKK_SHEET_GID = "0"              # Giriş Kalite sekme GID'si (Eğer farklıysa güncelleyebilirsiniz)
-
-CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
-CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
-CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
-
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
@@ -90,7 +83,7 @@ if "gkk_mesaj" not in st.session_state:
 @st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
     try:
-        df = pd.read_csv(CSV_URL)
+        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}")
         return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
@@ -98,15 +91,21 @@ def verileri_yukle():
 @st.cache_data(ttl=5, show_spinner=False)
 def giris_kalite_yukle():
     try:
-        df = pd.read_csv(CSV_GIRIS_URL)
-        return df.dropna(how="all")
+        resp = requests.get(APPS_SCRIPT_URL, headers=_HEADERS, timeout=15)
+        data = resp.json()
+        if data and len(data) > 1:
+            header = data[0]
+            rows = data[1:]
+            df = pd.DataFrame(rows, columns=header)
+            return df.dropna(how="all")
+        return pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 @st.cache_data(ttl=5, show_spinner=False)
 def ekstra_liste_yukle():
     try:
-        df = pd.read_csv(CSV2_URL)
+        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}")
         df = df.dropna(how="all")
         if df.empty or "Tip" not in df.columns or "Değer" not in df.columns:
             return [], []
@@ -158,14 +157,18 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
+    payload = {"islem": "gkk_ekle", "spreadsheetId": GKK_SPREADSHEET_ID, "veri": gkk_veri}
     try:
-        payload = {"islem": "gkk_ekle", "spreadsheetId": GKK_SPREADSHEET_ID, "veri": gkk_veri}
-        requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
-        giris_kalite_yukle.clear()
-        return True
-    except Exception:
-        giris_kalite_yukle.clear()
-        return True
+        resp = requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
+        # Hata ayıklama için sunucudan gelen ham yanıtı ekranda gösterelim
+        st.info(f"🔍 Apps Script Yanıt Kodu: {resp.status_code} | Yanıt İçeriği: {resp.text}")
+        if resp.status_code in (200, 302):
+            giris_kalite_yukle.clear()
+            return True
+        return False
+    except Exception as e:
+        st.error(f"❌ Bağlantı İstek Hatası: {e}")
+        return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
@@ -327,7 +330,6 @@ with sekme_yonetici:
     with alt_sekme2:
         df_gkk = giris_kalite_yukle()
         if not df_gkk.empty:
-            # Sütun isimlerindeki olası boşlukları temizleyelim
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
             
