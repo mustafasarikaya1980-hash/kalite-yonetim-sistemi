@@ -64,11 +64,18 @@ ENTRY2_DEGER = "entry.1752462997"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
+# Tablo Bağlantıları
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GID = "1834241278"         
-SHEET2_GID = "1493441004"        
+SHEET_GID = "1834241278"         # Saha Ret Verileri
+SHEET2_GID = "1493441004"        # Ekstra Listeler
 
 GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
+GKK_SHEET_GID = "0"              # Giriş Kalite sekme GID'si (Eğer farklıysa güncelleyebilirsiniz)
+
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
+CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
+CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
+
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
@@ -83,7 +90,7 @@ if "gkk_mesaj" not in st.session_state:
 @st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
     try:
-        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}")
+        df = pd.read_csv(CSV_URL)
         return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
@@ -91,21 +98,15 @@ def verileri_yukle():
 @st.cache_data(ttl=5, show_spinner=False)
 def giris_kalite_yukle():
     try:
-        resp = requests.get(APPS_SCRIPT_URL, headers=_HEADERS, timeout=15)
-        data = resp.json()
-        if data and len(data) > 1:
-            header = data[0]
-            rows = data[1:]
-            df = pd.DataFrame(rows, columns=header)
-            return df.dropna(how="all")
-        return pd.DataFrame()
+        df = pd.read_csv(CSV_GIRIS_URL)
+        return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
 
 @st.cache_data(ttl=5, show_spinner=False)
 def ekstra_liste_yukle():
     try:
-        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}")
+        df = pd.read_csv(CSV2_URL)
         df = df.dropna(how="all")
         if df.empty or "Tip" not in df.columns or "Değer" not in df.columns:
             return [], []
@@ -326,7 +327,10 @@ with sekme_yonetici:
     with alt_sekme2:
         df_gkk = giris_kalite_yukle()
         if not df_gkk.empty:
+            # Sütun isimlerindeki olası boşlukları temizleyelim
+            df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
+            
             col_onay = next((v for k, v in gkk_cols.items() if "onay" in k), None)
             col_firma = next((v for k, v in gkk_cols.items() if "firma" in k or "tedarikçi" in k or "company" in k), None)
 
