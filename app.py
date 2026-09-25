@@ -65,16 +65,18 @@ ENTRY2_DEGER = "entry.1752462997"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
+# Saha Verileri Tablosu
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GID = "1834241278"         # Saha Ret Verileri
-SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
+SHEET_GID = "1834241278"         
+SHEET2_GID = "1493441004"        
 
-# Doğrudan GIRIS_KALITE sayfasını okumak için GID bulma (Tablonuzdaki GIRIS_KALITE sekmesinin GID'si)
-SHEET_GIRIS_GID = "1248601990"   
+# GİRİŞ KALİTE TABLOSU (Şu an açık olan yeni tablonuz)
+GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
+SHEET_GIRIS_GID = "0"            # İlk sekme (gid=0)
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
-CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GIRIS_GID}"
+CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={SHEET_GIRIS_GID}"
 
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
@@ -159,7 +161,7 @@ def veri_kaydet(yeni_veri: dict) -> bool:
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
     try:
-        payload = {"islem": "gkk_ekle", "veri": gkk_veri}
+        payload = {"islem": "gkk_ekle", "spreadsheetId": GKK_SPREADSHEET_ID, "veri": gkk_veri}
         requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
         giris_kalite_yukle.clear()
         return True
@@ -381,7 +383,7 @@ with sekme_raporlar:
     if not df.empty:
         st.dataframe(df, use_container_width=True)
     else:
-        st.info("Rapor verisi bulunamadı.")
+        st.info("Rapor verisi bulunmuyor.")
 
 # --- 5. SEKME ---
 with sekme_ayarlar:
