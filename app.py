@@ -64,12 +64,17 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# 3. YEPYENİ Giriş Kalite Apps Script Web App URL
-GKK_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbylNnf37FaUS74JvbV03suQrWYHMXhkO20T5CrdFIzPoGribfdNPFidWle4QX2y/exec"
+# 3. Giriş Kalite Kontrol Formu (Doğrudan Google Form Response Adresi ve Entry Kodları)
+GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
+GKK_ENTRY_URUN = "entry.1393152516"
+GKK_ENTRY_FIRMA = "entry.1427845717"
+GKK_ENTRY_IRSALIYE = "entry.1390158217"
+GKK_ENTRY_ONAY = "entry.1302512463"
+GKK_ENTRY_PUAN = "entry.55313535"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# ANA E-TABLO BİLGİLERİ
+# ANA E-TABLO VE SEKME BİLGİLERİ
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Verileri Sekmesi
 SHEET2_GID = "1493441004"        # Ekstra Listeler Sekmesi
@@ -161,9 +166,16 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    payload = {"veri": gkk_veri}
+    payload = {
+        GKK_ENTRY_URUN: gkk_veri["urun"],
+        GKK_ENTRY_FIRMA: gkk_veri["firma"],
+        GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
+        GKK_ENTRY_ONAY: gkk_veri["onay"],
+        GKK_ENTRY_PUAN: str(gkk_veri["tedarikci_puani"]),
+        "emailAddress": SABIT_EPOSTA,
+    }
     try:
-        resp = requests.post(GKK_APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
+        resp = requests.post(GKK_FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
             giris_kalite_yukle.clear()
             return True
@@ -297,7 +309,7 @@ with sekme_giris:
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
-                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı ana e-tabloya başarıyla gönderildi!"
+                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı Google Form üzerinden ana e-tablonuza başarıyla işlendi!"
                 st.rerun()
             else:
                 st.error("❌ Kayıt gönderilirken bir hata oluştu!")
@@ -371,7 +383,7 @@ with sekme_yonetici:
             st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
             st.dataframe(df_gkk, use_container_width=True)
         else:
-            st.info("Giriş Kalite Kontrol sekmesinde şu an veri görünmüyor.")
+            st.info("Giriş Kalite Kontrol sekmesinde şu an veri görünmuyor.")
 
 # --- 4. SEKME ---
 with sekme_raporlar:
