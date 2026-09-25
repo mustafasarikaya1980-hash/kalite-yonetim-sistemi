@@ -64,13 +64,8 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# 3. Form (Giriş Kalite Kontrol Formu - YENİ VE TERTEMİZ)
-GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
-GKK_ENTRY_URUN = "entry.1393152516"
-GKK_ENTRY_FIRMA = "entry.1427845717"
-GKK_ENTRY_IRSALIYE = "entry.1390158217"
-GKK_ENTRY_ONAY = "entry.1302512463"
-GKK_ENTRY_PUAN = "entry.55313535"
+# 3. Yeni Giriş Kalite Apps Script Web App URL
+GKK_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyMFB0J1W1JqBUyB87y7AO96gq40gElJtF1zg1JKNOewJTNLee_vuWpRlM-yQzA-qvP3w/exec"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
@@ -84,7 +79,6 @@ GKK_SHEET_GID = "1030713247"
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
-CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
 
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
@@ -108,10 +102,22 @@ def verileri_yukle():
 @st.cache_data(ttl=5, show_spinner=False)
 def giris_kalite_yukle():
     try:
-        df = pd.read_csv(CSV_GIRIS_URL)
-        return df.dropna(how="all")
+        resp = requests.get(GKK_APPS_SCRIPT_URL, headers=_HEADERS, timeout=15)
+        data = resp.json()
+        if data and len(data) > 1:
+            header = data[0]
+            rows = data[1:]
+            df = pd.DataFrame(rows, columns=header)
+            return df.dropna(how="all")
+        # Eğer doğrudan CSV okunmak istenirse yedek yöntem:
+        df_csv = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}")
+        return df_csv.dropna(how="all")
     except Exception:
-        return pd.DataFrame()
+        try:
+            df_csv = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}")
+            return df_csv.dropna(how="all")
+        except Exception:
+            return pd.DataFrame()
 
 @st.cache_data(ttl=5, show_spinner=False)
 def ekstra_liste_yukle():
@@ -168,16 +174,9 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    payload = {
-        GKK_ENTRY_URUN: gkk_veri["urun"],
-        GKK_ENTRY_FIRMA: gkk_veri["firma"],
-        GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
-        GKK_ENTRY_ONAY: gkk_veri["onay"],
-        GKK_ENTRY_PUAN: str(gkk_veri["tedarikci_puani"]),
-        "emailAddress": SABIT_EPOSTA,
-    }
+    payload = {"islem": "gkk_ekle", "veri": gkk_veri}
     try:
-        resp = requests.post(GKK_FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
+        resp = requests.post(GKK_APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
             giris_kalite_yukle.clear()
             return True
@@ -311,7 +310,7 @@ with sekme_giris:
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
-                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi ve e-tabloya işlendi!"
+                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi!"
                 st.rerun()
             else:
                 st.error("❌ Kayıt gönderilirken bir hata oluştu!")
