@@ -64,13 +64,13 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# 3. Form (Giriş Kalite Kontrol Formu) - YENİ VE DOĞRUDAN FORM BAĞLANTISI
-GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLScjqLjFHMyzEpi_pjesuvROrNOwhEj_qht8u29RviW-ky7ZyA/formResponse"
-GKK_ENTRY_URUN = "entry.758755841"
-GKK_ENTRY_FIRMA = "entry.1141380752"
-GKK_ENTRY_IRSALIYE = "entry.711760392"
-GKK_ENTRY_ONAY = "entry.506469961"
-GKK_ENTRY_PUAN = "entry.500896439"
+# 3. Form (Giriş Kalite Kontrol Formu - YENİ VE TERTEMİZ)
+GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
+GKK_ENTRY_URUN = "entry.1393152516"
+GKK_ENTRY_FIRMA = "entry.1427845717"
+GKK_ENTRY_IRSALIYE = "entry.1390158217"
+GKK_ENTRY_ONAY = "entry.1302512463"
+GKK_ENTRY_PUAN = "entry.55313535"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
@@ -78,9 +78,9 @@ SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         
 SHEET2_GID = "1493441004"        
 
-# Giriş Kalite E-Tablo Bağlantısı (Yönetici panelinde listelemek için)
-GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
-GKK_SHEET_GID = "0"
+# Yeni Giriş Kalite E-Tablo ve GID Bilgileri
+GKK_SPREADSHEET_ID = "1ToCdroxQTWO217ZYvUQGFHJsNorfGgMN4nd8VbSfy0"
+GKK_SHEET_GID = "1030713247"
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
@@ -311,7 +311,7 @@ with sekme_giris:
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
-                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi!"
+                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi ve e-tabloya işlendi!"
                 st.rerun()
             else:
                 st.error("❌ Kayıt gönderilirken bir hata oluştu!")
@@ -330,17 +330,8 @@ with sekme_yonetici:
     with alt_sekme1:
         df = verileri_yukle()
         if not df.empty:
-            sutunlar = {str(c).strip().lower(): c for c in df.columns}
-            ret_col = next((v for k, v in sutunlar.items() if "ret adedi" in k or "ret m" in k or k == "ret"), None)
-            uretim_col = next((v for k, v in sutunlar.items() if "üretim" in k or "uretim" in k), None)
-            parca_col = next((v for k, v in sutunlar.items() if "parça" in k or "parca" in k), None)
-            neden_col = next((v for k, v in sutunlar.items() if "ret nedeni" in k or "neden" in k), None)
-
-            df["_RET"] = pd.to_numeric(df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if ret_col else 0.0
-            df["_URETIM"] = pd.to_numeric(df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if uretim_col else 0.0
-
             st.metric("Toplam Saha Kaydı", f"{len(df)} Adet")
-            st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
+            st.dataframe(df, use_container_width=True)
         else:
             st.info("Saha verisi bulunmuyor.")
 
