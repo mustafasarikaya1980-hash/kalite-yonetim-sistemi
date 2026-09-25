@@ -65,18 +65,18 @@ ENTRY2_DEGER = "entry.1752462997"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# Saha Verileri Tablosu
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         
 SHEET2_GID = "1493441004"        
 
-# GİRİŞ KALİTE TABLOSU (Şu an açık olan yeni tablonuz)
+# Aktif Giriş Kalite Tablosu ve Sekme Adı
 GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
-SHEET_GIRIS_GID = "0"            # İlk sekme (gid=0)
+GKK_SHEET_NAME = "GIRIS_KALITE"
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
-CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={SHEET_GIRIS_GID}"
+# Doğrudan sekme adına göre CSV export
+CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={GKK_SHEET_NAME}"
 
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
