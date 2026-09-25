@@ -404,12 +404,10 @@ with sekme_yonetici:
     with alt_sekme2:
         df_gkk = giris_kalite_yukle()
         if not df_gkk.empty:
-            # Sütun isimlerini güvenli bulma
             gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
             col_onay = next((v for k, v in gkk_cols.items() if "onay" in k), None)
             col_firma = next((v for k, v in gkk_cols.items() if "firma" in k or "tedarikçi" in k or "company" in k), None)
 
-            # Boş sütunları güvenli doldurma (görüntünün bozulmaması için)
             for c in df_gkk.columns:
                 df_gkk[c] = df_gkk[c].fillna("Bilgi Yok")
 
@@ -425,7 +423,7 @@ with sekme_yonetici:
             m_g4.metric("❌ Red Edilen", f"{red_sayisi} Parti")
 
             st.markdown("---")
-            col_chart1, col_chart2 = alt.selection_point(), st.columns(2)
+            col_chart1, col_chart2 = st.columns(2)
 
             with col_chart1:
                 st.subheader("📊 Onay Durumu Dağılımı")
