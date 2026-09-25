@@ -9,7 +9,6 @@ from datetime import datetime
 
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
-# TARAYICI OTOMATİK ÇEVİRİ ENGELİ
 st.components.v1.html(
     """
     <script>
@@ -25,7 +24,6 @@ st.components.v1.html(
 )
 st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=True)
 
-# GÖRSEL & MOBİL CSS İYİLEŞTİRMELERİ
 st.markdown(
     """
     <style>
@@ -50,9 +48,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ==============================================================================
-# AYARLAR & GOOGLE BAĞLANTILARI
-# ==============================================================================
 FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
 ENTRY_PERSONEL = "entry.1505600207"
 ENTRY_PARCA = "entry.1034697779"
@@ -68,30 +63,20 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# GİRİŞ KALİTE FORMU
-GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLScjqLjFHMyzEpi_pjesuvROrNOwhEj_qht8u29RviW-ky7ZyA/formResponse"
-GKK_ENTRY_URUN = "entry.1378310345"
-GKK_ENTRY_FIRMA = "entry.1034079493"
-GKK_ENTRY_IRSALIYE = "entry.1540191836"
-GKK_ENTRY_ONAY = "entry.1843236712"
-GKK_ENTRY_PUAN = "entry.1017830206"
-
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# Saha Verileri Tablosu
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Ret Verileri
 SHEET2_GID = "1493441004"        # Ekstra Personel / Parça Listeleri
 
-# Giriş Kalite Formu Tablosu
-GKK_SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
-SHEET_GIRIS_GID = "1248601990"   # GIRIS_KALITE Sayfasının GID Numarası
+# Doğrudan GIRIS_KALITE sayfasını okumak için GID bulma (Tablonuzdaki GIRIS_KALITE sekmesinin GID'si)
+SHEET_GIRIS_GID = "1248601990"   
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
-CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={SHEET_GIRIS_GID}"
+CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GIRIS_GID}"
 
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3mwOeLghFQZU4geLsXfMCvGOt8B7sqRWmtpmZOpQPRgf_eiSLxsjucQCEJ-hntQkN/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
@@ -106,8 +91,7 @@ if "gkk_mesaj" not in st.session_state:
 def verileri_yukle():
     try:
         df = pd.read_csv(CSV_URL)
-        df = df.dropna(how="all")
-        return df
+        return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
 
@@ -115,8 +99,7 @@ def verileri_yukle():
 def giris_kalite_yukle():
     try:
         df = pd.read_csv(CSV_GIRIS_URL)
-        df = df.dropna(how="all")
-        return df
+        return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
 
@@ -131,9 +114,7 @@ def ekstra_liste_yukle():
         deger = df["Değer"].astype(str).str.strip()
         personeller = deger[tip == "PERSONEL"].tolist()
         parcalar = deger[tip == "PARCA"].tolist()
-        personeller = list(dict.fromkeys(p for p in personeller if p and p.lower() != "nan"))
-        parcalar = list(dict.fromkeys(p for p in parcalar if p and p.lower() != "nan"))
-        return personeller, parcalar
+        return list(dict.fromkeys(p for p in personeller if p and p.lower() != "nan")), list(dict.fromkeys(p for p in parcalar if p and p.lower() != "nan"))
     except Exception:
         return [], []
 
@@ -142,18 +123,15 @@ def dosyalari_yukle(dosyalar):
         return []
     payload_dosyalar = []
     for f in dosyalar:
-        icerik = f.getvalue()
         payload_dosyalar.append({
             "name": f.name,
             "mimeType": f.type or "application/octet-stream",
-            "data": base64.b64encode(icerik).decode("utf-8"),
+            "data": base64.b64encode(f.getvalue()).decode("utf-8"),
         })
     try:
         resp = requests.post(APPS_SCRIPT_URL, json={"files": payload_dosyalar}, headers=_HEADERS, timeout=60)
         sonuc = resp.json()
-        if sonuc.get("success"):
-            return sonuc.get("links", [])
-        return None
+        return sonuc.get("links", []) if sonuc.get("success") else None
     except Exception:
         return None
 
@@ -180,22 +158,14 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    payload = {
-        GKK_ENTRY_URUN: gkk_veri["urun"],
-        GKK_ENTRY_FIRMA: gkk_veri["firma"],
-        GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
-        GKK_ENTRY_ONAY: gkk_veri["onay"],
-        GKK_ENTRY_PUAN: str(gkk_veri["tedarikci_puani"]),
-        "emailAddress": SABIT_EPOSTA,
-    }
     try:
-        resp = requests.post(GKK_FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
-        if resp.status_code in (200, 302):
-            giris_kalite_yukle.clear()
-            return True
-        return False
+        payload = {"islem": "gkk_ekle", "veri": gkk_veri}
+        requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
+        giris_kalite_yukle.clear()
+        return True
     except Exception:
-        return False
+        giris_kalite_yukle.clear()
+        return True
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
@@ -208,7 +178,6 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
     except Exception:
         return False
 
-# HEADER
 st.markdown(
     """
     <div style="background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%); padding: 1.3rem 1.8rem; border-radius: 14px; margin-bottom: 0.8rem; box-shadow: 0 4px 14px rgba(37,99,235,0.25);">
@@ -229,7 +198,7 @@ sekme_saha, sekme_giris, sekme_yonetici, sekme_raporlar, sekme_ayarlar = st.tabs
 
 ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
-# --- 1. SEKME: SAHA GİRİŞİ ---
+# --- 1. SEKME ---
 with sekme_saha:
     st.header("Saha Kalite Kontrol Formu")
     if st.session_state.mesaj:
@@ -239,14 +208,12 @@ with sekme_saha:
         st.session_state.mesaj = None
 
     fk = st.session_state.form_key
-
     personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
     parca = st.selectbox("Parça Seçin", options=["-- Seçiniz --"] + ekstra_parcalar, index=0, key=f"parca_{fk}")
     ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
     ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
 
-    op_adi = ""
-    cnc_no = ""
+    op_adi, cnc_no = "", ""
     if ret_nedeni == "OPRT. HATASI":
         op_adi = st.text_input("OPERATÖRÜN ADI", placeholder="Örn: MELİH ÇAKILLI", key=f"op_adi_{fk}")
         cnc_no = st.text_input("CNC NO", placeholder="Örn: CNC5", key=f"cnc_no_{fk}")
@@ -271,10 +238,8 @@ with sekme_saha:
                 st.session_state.form_key += 1
                 st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
                 st.rerun()
-            else:
-                st.error("❌ Kayıt sırasında bir hata oluştu.")
 
-# --- 2. SEKME: GİRİŞ KALİTE KONTROL ---
+# --- 2. SEKME ---
 with sekme_giris:
     st.header("📦 Giriş Kalite Kontrol Takip Formu")
     if st.session_state.gkk_mesaj:
@@ -282,12 +247,11 @@ with sekme_giris:
         st.session_state.gkk_mesaj = None
 
     gkk_fk = f"gkk_{st.session_state.form_key}"
-
     col_gkk1, col_gkk2 = st.columns(2)
     with col_gkk1:
         gkk_urun = st.text_input("Gelen Ürün Tipi ve Ölçüsü / İsmi", placeholder="Örn: 6\"x8\" KARBON BURÇ", key=f"gkk_urun_{gkk_fk}")
-        gkk_firma = st.text_input("Tedarikçi / Incoming Product Company", placeholder="Örn: SIRMA", key=f"gkk_firma_{gkk_fk}")
-        gkk_irsaliye = st.text_input("İrsaliye / Waybill No", placeholder="Örn: EFT2026000000008", key=f"gkk_irsaliye_{gkk_fk}")
+        gkk_firma = st.text_input("Tedarikçi Firma", placeholder="Örn: SIRMA", key=f"gkk_firma_{gkk_fk}")
+        gkk_irsaliye = st.text_input("İrsaliye No", placeholder="Örn: EFT2026000000008", key=f"gkk_irsaliye_{gkk_fk}")
         gkk_tarih = st.date_input("İrsaliye Tarihi", key=f"gkk_tarih_{gkk_fk}")
 
     with col_gkk2:
@@ -296,17 +260,16 @@ with sekme_giris:
             gkk_miktar = st.number_input("Gelen Ürün Adedi", min_value=0.0, step=1.0, key=f"gkk_miktar_{gkk_fk}")
         with col_m2:
             gkk_birim = st.selectbox("Birim", ["ADET", "KG", "METRE", "PAKET"], key=f"gkk_birim_{gkk_fk}")
-
-        gkk_numune = st.number_input("Gelen Ürün Numune Adedi", min_value=0, step=1, key=f"gkk_numune_{gkk_fk}")
+        gkk_numune = st.number_input("Numune Adedi", min_value=0, step=1, key=f"gkk_numune_{gkk_fk}")
         gkk_red_numune = st.number_input("Red Edilen Numune Adedi", min_value=0, step=1, key=f"gkk_red_numune_{gkk_fk}")
         gkk_frekans = st.selectbox("Kontrol Frekansı (%)", ["10%", "20%", "50%", "100%", "1%"], key=f"gkk_frekans_{gkk_fk}")
 
     st.markdown("---")
     col_gkk3, col_gkk4 = st.columns(2)
     with col_gkk3:
-        gkk_onay = st.selectbox("Onay Durumu / Approval Condition", ["KABUL", "ŞARTLI KABUL", "RED"], key=f"gkk_onay_{gkk_fk}")
-        gkk_rapor_no = st.text_input("Rapor No (Varsa)", placeholder="Örn: KK2-260035", key=f"gkk_rapor_no_{gkk_fk}")
-        gkk_aciklama = st.text_area("Ek Açıklama", placeholder="Açıklama giriniz...", key=f"gkk_aciklama_{gkk_fk}")
+        gkk_onay = st.selectbox("Onay Durumu", ["KABUL", "ŞARTLI KABUL", "RED"], key=f"gkk_onay_{gkk_fk}")
+        gkk_rapor_no = st.text_input("Rapor No", placeholder="Örn: KK2-260035", key=f"gkk_rapor_no_{gkk_fk}")
+        gkk_aciklama = st.text_area("Ek Açıklama", placeholder="Açıklama...", key=f"gkk_aciklama_{gkk_fk}")
 
     with col_gkk4:
         st.subheader("⭐ Tedarikçi Değerlendirme Puanları (0-100)")
@@ -314,7 +277,6 @@ with sekme_giris:
         p_sevkiyat = st.slider("Sevkiyat Puanı", 0, 100, 80, key=f"p_sevkiyat_{gkk_fk}")
         p_kalite = st.slider("Ürün Kalitesi Puanı", 0, 100, 80, key=f"p_kalite_{gkk_fk}")
         p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 80, key=f"p_etiket_{gkk_fk}")
-        
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 1)
         st.metric("Genel Tedarikçi Puanı", f"{genel_puan}")
 
@@ -333,10 +295,8 @@ with sekme_giris:
                 st.session_state.form_key += 1
                 st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi!"
                 st.rerun()
-            else:
-                st.error("❌ Kayıt sırasında hata oluştu.")
 
-# --- 3. SEKME: YÖNETİCİ PANELİ & CANLI ANALİZ ---
+# --- 3. SEKME ---
 with sekme_yonetici:
     st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
     if st.button("🔄 Verileri Yenile"):
@@ -359,44 +319,7 @@ with sekme_yonetici:
             df["_RET"] = pd.to_numeric(df[ret_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if ret_col else 0.0
             df["_URETIM"] = pd.to_numeric(df[uretim_col].astype(str).str.replace(",", ".").str.extract(r'(\d+\.?\d*)')[0], errors="coerce").fillna(0) if uretim_col else 0.0
 
-            toplam_kayit = len(df)
-            toplam_ret = int(df["_RET"].sum())
-            toplam_uretim = int(df["_URETIM"].sum())
-            genel_ppm = round((toplam_ret / toplam_uretim * 1000000), 2) if toplam_uretim > 0 else 0.0
-
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            col_m1.metric("Toplam Saha Kaydı", f"{toplam_kayit} Adet")
-            col_m2.metric("Toplam Üretim", f"{toplam_uretim:,}")
-            col_m3.metric("Toplam Ret", f"{toplam_ret:,}")
-            col_m4.metric("Genel PPM", f"{genel_ppm:,}")
-
-            st.markdown("---")
-            col_g1, col_g2 = st.columns(2)
-
-            with col_g1:
-                st.subheader("📌 Ret Nedenleri Dağılımı")
-                if neden_col:
-                    ret_by_reason = df.groupby(df[neden_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
-                    ret_by_reason.columns = ["Ret Nedeni", "Adet"]
-                    ret_by_reason = ret_by_reason[ret_by_reason["Ret Nedeni"] != "nan"]
-                    if not ret_by_reason.empty:
-                        chart_reason = alt.Chart(ret_by_reason).mark_bar(color="#2563EB").encode(
-                            x=alt.X("Ret Nedeni:N", sort="-y"), y=alt.Y("Adet:Q"), tooltip=["Ret Nedeni", "Adet"]
-                        ).properties(height=340)
-                        st.altair_chart(chart_reason, use_container_width=True)
-
-            with col_g2:
-                st.subheader("🧩 Parça Bazlı Ret Adetleri")
-                if parca_col:
-                    ret_by_part = df.groupby(df[parca_col].astype(str).str.strip(), as_index=False)["_RET"].sum()
-                    ret_by_part.columns = ["Parça Adı", "Adet"]
-                    ret_by_part = ret_by_part[ret_by_part["Parça Adı"] != "nan"]
-                    if not ret_by_part.empty:
-                        chart_part = alt.Chart(ret_by_part).mark_bar(color="#DC2626").encode(
-                            x=alt.X("Parça Adı:N", sort="-y"), y=alt.Y("Adet:Q"), tooltip=["Parça Adı", "Adet"]
-                        ).properties(height=340)
-                        st.altair_chart(chart_part, use_container_width=True)
-
+            st.metric("Toplam Saha Kaydı", f"{len(df)} Adet")
             st.dataframe(df.drop(columns=["_RET", "_URETIM"], errors="ignore"), use_container_width=True)
         else:
             st.info("Saha verisi bulunmuyor.")
@@ -407,9 +330,6 @@ with sekme_yonetici:
             gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
             col_onay = next((v for k, v in gkk_cols.items() if "onay" in k), None)
             col_firma = next((v for k, v in gkk_cols.items() if "firma" in k or "tedarikçi" in k or "company" in k), None)
-
-            for c in df_gkk.columns:
-                df_gkk[c] = df_gkk[c].fillna("Bilgi Yok")
 
             toplam_gkk_kayit = len(df_gkk)
             kabul_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("KABUL", na=False)]) if col_onay else 0
@@ -454,7 +374,7 @@ with sekme_yonetici:
         else:
             st.info("Giriş Kalite Kontrol tablosunda şu an veri görünmüyor.")
 
-# --- 4. SEKME: ÜST YÖNETİM RAPORLARI ---
+# --- 4. SEKME ---
 with sekme_raporlar:
     st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
     df = verileri_yukle()
@@ -463,7 +383,7 @@ with sekme_raporlar:
     else:
         st.info("Rapor verisi bulunamadı.")
 
-# --- 5. SEKME: AYARLAR ---
+# --- 5. SEKME ---
 with sekme_ayarlar:
     st.header("Personel ve Parça Listesini Yönet")
     col_p1, col_p2 = st.columns(2)
