@@ -47,6 +47,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# 1. Form (Saha Veri Girişi)
 FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc2GWwoN4UOcWHSZxNQNNT-rNBJrI1I4E1xN8CHMA-cO1BxqA/formResponse"
 ENTRY_PERSONEL = "entry.1505600207"
 ENTRY_PARCA = "entry.1034697779"
@@ -58,9 +59,18 @@ ENTRY_RET_MIKTARI = "entry.410490317"
 ENTRY_URETIM_MIKTARI = "entry.958612329"
 ENTRY_BELGE_LINKLERI = "entry.795755675"
 
+# 2. Form (Ekstra Listeler)
 FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT_EMRb_NHZsbcpMk-ZZmu0sQflfC_tt_A/formResponse"
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
+
+# 3. Form (Giriş Kalite Kontrol Formu) - YENİ VE DOĞRUDAN FORM BAĞLANTISI
+GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLScjqLjFHMyzEpi_pjesuvROrNOwhEj_qht8u29RviW-ky7ZyA/formResponse"
+GKK_ENTRY_URUN = "entry.758755841"
+GKK_ENTRY_FIRMA = "entry.1141380752"
+GKK_ENTRY_IRSALIYE = "entry.711760392"
+GKK_ENTRY_ONAY = "entry.506469961"
+GKK_ENTRY_PUAN = "entry.500896439"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
@@ -68,7 +78,14 @@ SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         
 SHEET2_GID = "1493441004"        
 
+# Giriş Kalite E-Tablo Bağlantısı (Yönetici panelinde listelemek için)
 GKK_SPREADSHEET_ID = "1t74n8Mr37F2nop6x8qIEokTj2Iplw587RAnMIQH13Wk"
+GKK_SHEET_GID = "0"
+
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
+CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
+CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{GKK_SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
+
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAlEBWccxzs1M_myglp-eMq_dhc8VjNejUoaVcv68Axn8ugVyImCFXlu9Y/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
@@ -83,7 +100,7 @@ if "gkk_mesaj" not in st.session_state:
 @st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
     try:
-        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}")
+        df = pd.read_csv(CSV_URL)
         return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
@@ -91,21 +108,15 @@ def verileri_yukle():
 @st.cache_data(ttl=5, show_spinner=False)
 def giris_kalite_yukle():
     try:
-        resp = requests.get(APPS_SCRIPT_URL, headers=_HEADERS, timeout=15)
-        data = resp.json()
-        if data and len(data) > 1:
-            header = data[0]
-            rows = data[1:]
-            df = pd.DataFrame(rows, columns=header)
-            return df.dropna(how="all")
-        return pd.DataFrame()
+        df = pd.read_csv(CSV_GIRIS_URL)
+        return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
 
 @st.cache_data(ttl=5, show_spinner=False)
 def ekstra_liste_yukle():
     try:
-        df = pd.read_csv(f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}")
+        df = pd.read_csv(CSV2_URL)
         df = df.dropna(how="all")
         if df.empty or "Tip" not in df.columns or "Değer" not in df.columns:
             return [], []
@@ -157,17 +168,21 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    payload = {"islem": "gkk_ekle", "spreadsheetId": GKK_SPREADSHEET_ID, "veri": gkk_veri}
+    payload = {
+        GKK_ENTRY_URUN: gkk_veri["urun"],
+        GKK_ENTRY_FIRMA: gkk_veri["firma"],
+        GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
+        GKK_ENTRY_ONAY: gkk_veri["onay"],
+        GKK_ENTRY_PUAN: str(gkk_veri["tedarikci_puani"]),
+        "emailAddress": SABIT_EPOSTA,
+    }
     try:
-        resp = requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=15)
-        # Hata ayıklama için sunucudan gelen ham yanıtı ekranda gösterelim
-        st.info(f"🔍 Apps Script Yanıt Kodu: {resp.status_code} | Yanıt İçeriği: {resp.text}")
+        resp = requests.post(GKK_FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
             giris_kalite_yukle.clear()
             return True
         return False
-    except Exception as e:
-        st.error(f"❌ Bağlantı İstek Hatası: {e}")
+    except Exception:
         return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
@@ -298,6 +313,8 @@ with sekme_giris:
                 st.session_state.form_key += 1
                 st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla kaydedildi!"
                 st.rerun()
+            else:
+                st.error("❌ Kayıt gönderilirken bir hata oluştu!")
 
 # --- 3. SEKME ---
 with sekme_yonetici:
