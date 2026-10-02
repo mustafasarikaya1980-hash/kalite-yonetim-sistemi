@@ -208,7 +208,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 4 SEKME
 sekme_saha, sekme_giris, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ",
     "📦 GİRİŞ KALİTE KONTROL",
@@ -342,14 +341,13 @@ with sekme_yonetici:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
             
-            # --- TARİH SÜTUNU KESİN TESPİTİ (2. Sütun / İndeks 1 - "Tarih" sütunu) ---
             c_tarih = None
             for col in df_gkk.columns:
                 if "tarih" in col.lower() and "zaman" not in col.lower():
                     c_tarih = col
                     break
             if not c_tarih and len(df_gkk.columns) > 1:
-                c_tarih = df_gkk.columns[1] # Form Yanıtları tablosundaki 2. sütun (Tarih)
+                c_tarih = df_gkk.columns[1]
 
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
@@ -389,7 +387,6 @@ with sekme_yonetici:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
                 
                 if c_tarih:
-                    # Tarih verisini güvenli bir şekilde parse edip haftalık gruplamaya alıyoruz
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], format="%d.%m.%Y", errors="coerce")
                     df_gkk["_dt"] = df_gkk["_dt"].fillna(pd.to_datetime(df_gkk[c_tarih], errors="coerce"))
                     
