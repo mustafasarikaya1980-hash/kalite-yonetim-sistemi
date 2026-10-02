@@ -74,7 +74,7 @@ GKK_ENTRY_PUAN = "entry.55313535"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# ANA E-TABLO VE SEKME BİLGİLERİ (Güncellenmiş GKK_SHEET_GID ile)
+# ANA E-TABLO VE SEKME BİLGİLERİ
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Verileri Sekmesi
 SHEET2_GID = "1493441004"        # Ekstra Listeler Sekmesi
@@ -317,7 +317,7 @@ with sekme_giris:
 # --- 3. SEKME ---
 with sekme_yonetici:
     st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
-    if st.button("🔄 Verileri Yenile"):
+    if st.button("🔄 Verileri Yenile", key="btn_yenile_yonetici"):
         verileri_yukle.clear()
         ekstra_liste_yukle.clear()
         giris_kalite_yukle.clear()
@@ -383,16 +383,66 @@ with sekme_yonetici:
             st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
             st.dataframe(df_gkk, use_container_width=True)
         else:
-            st.info("Giriş Kalite Kontrol sekmesinde şu an veri görünmüyor. Lütfen sekme GID'sini (1709999332) kontrol edin.")
+            st.info("Giriş Kalite Kontrol sekmesinde şu an veri görünmüyor.")
 
-# --- 4. SEKME ---
+# --- 4. SEKME: ÜST YÖNETİM RAPORLARI (Sizin Excel Tablonuzun Birebir Formatı) ---
 with sekme_raporlar:
-    st.header("📈 Üst Yönetim Kalite Özeti & Excel Rapor İndirme")
-    df = verileri_yukle()
-    if not df.empty:
-        st.dataframe(df, use_container_width=True)
+    st.header("📈 Üst Yönetim Kalite ve Tedarikçi Değerlendirme Raporu")
+    st.markdown("Üst yönetime sunduğunuz resmi formata uygun olarak düzenlenmiş giriş kalite ve tedarikçi değerlendirme tablosu aşağıdadır.")
+    
+    df_gkk = giris_kalite_yukle()
+    if not df_gkk.empty:
+        df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
+        
+        # Sizin Excel sütunlarınıza karşılık gelen kolon eşleştirmelerini dinamik yakalayalım
+        cols_map = {c.lower(): c for c in df_gkk.columns}
+        
+        c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k or "timestamp" in k), df_gkk.columns[0])
+        c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
+        c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
+        c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
+        c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
+        c_puan = next((cols_map[k] for k in cols_map if "puan" in k or "100" in k), None)
+
+        # Üst Yönetim Özet Metrikleri
+        toplam_parti = len(df_gkk)
+        
+        # Ortalama değerlendirme puanı hesaplama
+        ortalama_puan = 0.0
+        if c_puan and pd.to_numeric(df_gkk[c_puan], errors="coerce").notna().any():
+            ortalama_puan = round(pd.to_numeric(df_gkk[c_puan], errors="coerce").mean(), 2)
+
+        col_r1, col_r2, col_r3 = st.columns(3)
+        col_r1.metric("Toplam Raporlanan Parti", f"{toplam_parti} Adet")
+        col_r2.metric("Genel Ortalama Değerlendirme", f"{ortalama_puan} / 100")
+        col_r3.metric("Rapor Formatı", "Üst Yönetim Standardı")
+
+        st.markdown("---")
+        st.subheader("📋 Resmi Yönetim Tablosu")
+
+        # Sizin Excel'inizdeki sütun sıralamasına benzer temiz bir görünüm oluşturalım
+        temiz_df = pd.DataFrame()
+        temiz_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
+        temiz_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
+        temiz_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
+        temiz_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
+        temiz_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
+        temiz_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
+
+        st.dataframe(temiz_df, use_container_width=True)
+
+        # Excel'deki özet tablonun sayısal dökümü
+        with st.expander("📊 Yönetim Özet İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek)"):
+            if c_puan:
+                puanlar = pd.to_numeric(df_gkk[c_puan], errors="coerce").dropna()
+                if not puanlar.empty:
+                    col_st1, col_st2, col_st3, col_st4 = st.columns(4)
+                    col_st1.metric("TOPLAM PARTİ", f"{len(puanlar)} ADET")
+                    col_st2.metric("ORTALAMA PUAN", f"{round(puanlar.mean(), 2)}")
+                    col_st3.metric("EN KÜÇÜK PUAN", f"{puanlar.min()}")
+                    col_st4.metric("EN BÜYÜK PUAN", f"{puanlar.max()}")
     else:
-        st.info("Rapor verisi bulunmuyor.")
+        st.info("Üst yönetim raporu için henüz veri bulunmuyor.")
 
 # --- 5. SEKME ---
 with sekme_ayarlar:
