@@ -66,8 +66,8 @@ ENTRY2_DEGER = "entry.1752462997"
 
 # 3. Giriş Kalite Kontrol Formu
 GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
-GKK_ENTRY_TARIH = "entry.1982855167"      # Kontrol Tarihi (Formdaki kullanıcı seçimi)
-GKK_ENTRY_RAPOR = "entry.1205608639"      # Rapor No
+GKK_ENTRY_TARIH = "entry.1982855167"      
+GKK_ENTRY_RAPOR = "entry.1205608639"      
 GKK_ENTRY_URUN = "entry.1393152516"
 GKK_ENTRY_FIRMA = "entry.1427845717"
 GKK_ENTRY_IRSALIYE = "entry.1390158217"
@@ -269,7 +269,6 @@ with sekme_giris:
     gkk_fk = f"gkk_{st.session_state.form_key}"
     col_gkk1, col_gkk2 = st.columns(2)
     with col_gkk1:
-        # Formdaki Kontrol Tarihi (Bugünün tarihiyle başlar, GG.AA.YYYY formatında işlenir)
         gkk_tarih = st.date_input("Giriş Kalite Kontrol Tarihi", value=datetime.today(), key=f"gkk_tarih_{gkk_fk}")
         gkk_urun = st.text_input("Gelen Ürün Tipi ve Ölçüsü / İsmi", placeholder="Örn: 6\"x8\" KARBON BURÇ", key=f"gkk_urun_{gkk_fk}")
         gkk_firma = st.text_input("Tedarikçi Firma", placeholder="Örn: SIRMA", key=f"gkk_firma_{gkk_fk}")
@@ -343,10 +342,14 @@ with sekme_yonetici:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
             
-            # Tablodaki ilk sütunlardan "tarih" kelimesini içeren sütunu kesin olarak kontrol tarihi olarak alıyoruz
-            c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k and "zaman" not in k), None)
-            if not c_tarih:
-                c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k), df_gkk.columns[1] if len(df_gkk.columns) > 1 else df_gkk.columns[0])
+            # --- TARİH SÜTUNU KESİN TESPİTİ (2. Sütun / İndeks 1 - "Tarih" sütunu) ---
+            c_tarih = None
+            for col in df_gkk.columns:
+                if "tarih" in col.lower() and "zaman" not in col.lower():
+                    c_tarih = col
+                    break
+            if not c_tarih and len(df_gkk.columns) > 1:
+                c_tarih = df_gkk.columns[1] # Form Yanıtları tablosundaki 2. sütun (Tarih)
 
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
@@ -386,7 +389,7 @@ with sekme_yonetici:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
                 
                 if c_tarih:
-                    # Formda seçilen kontrol tarihini baz alarak haftalık gruplama yapıyoruz
+                    # Tarih verisini güvenli bir şekilde parse edip haftalık gruplamaya alıyoruz
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], format="%d.%m.%Y", errors="coerce")
                     df_gkk["_dt"] = df_gkk["_dt"].fillna(pd.to_datetime(df_gkk[c_tarih], errors="coerce"))
                     
