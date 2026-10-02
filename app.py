@@ -64,10 +64,10 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# 3. Giriş Kalite Kontrol Formu
+# 3. Giriş Kalite Kontrol Formu (Güncel Form URL ve Entry Kodları)
 GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
-GKK_ENTRY_TARIH = "entry.1982855167"      # Kontrol Tarihi
-GKK_ENTRY_RAPOR = "entry.1205608639"      # Rapor No
+GKK_ENTRY_TARIH = "entry.1982855167"      
+GKK_ENTRY_RAPOR = "entry.1205608639"      
 GKK_ENTRY_URUN = "entry.1393152516"
 GKK_ENTRY_FIRMA = "entry.1427845717"
 GKK_ENTRY_IRSALIYE = "entry.1390158217"
@@ -76,11 +76,11 @@ GKK_ENTRY_PUAN = "entry.55313535"
 
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
-# ANA E-TABLO VE SEKME BİLGİLERİ
+# ANA E-TABLO VE GÜNCEL GKK SEKME GID'Sİ ("Form Yanıtları 7" / 1866719555)
 SPREADSHEET_ID = "1O8qGTDrwv0RRv2Qv7jeux93Y8vz4uT2pwJRQ8U1Vq8o"
 SHEET_GID = "1834241278"         # Saha Verileri Sekmesi
 SHEET2_GID = "1493441004"        # Ekstra Listeler Sekmesi
-GKK_SHEET_GID = "1709999332"     # GÜNCEL GİRİŞ KALİTE (Form Yanıtları 6)
+GKK_SHEET_GID = "1866719555"     # GÜNCEL GİRİŞ KALİTE SEKME GID (Form Yanıtları 7)
 
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET_GID}"
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
@@ -269,7 +269,6 @@ with sekme_giris:
     gkk_fk = f"gkk_{st.session_state.form_key}"
     col_gkk1, col_gkk2 = st.columns(2)
     with col_gkk1:
-        # Kontrol Tarihi (Bugünün tarihiyle açılır, GG.AA.YYYY formatında işlenir)
         gkk_tarih = st.date_input("Giriş Kalite Kontrol Tarihi", value=datetime.today(), key=f"gkk_tarih_{gkk_fk}")
         gkk_urun = st.text_input("Gelen Ürün Tipi ve Ölçüsü / İsmi", placeholder="Örn: 6\"x8\" KARBON BURÇ", key=f"gkk_urun_{gkk_fk}")
         gkk_firma = st.text_input("Tedarikçi Firma", placeholder="Örn: SIRMA", key=f"gkk_firma_{gkk_fk}")
@@ -382,9 +381,7 @@ with sekme_yonetici:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
                 
                 if c_tarih:
-                    # Tarih sütununu gün.ay.yıl formatında parse edelim
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], format="%d.%m.%Y", errors="coerce")
-                    # Eğer format uymazsa genel parse etmeyi dener
                     df_gkk["_dt"] = df_gkk["_dt"].fillna(pd.to_datetime(df_gkk[c_tarih], errors="coerce"))
                     
                     df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(0).astype(int)
