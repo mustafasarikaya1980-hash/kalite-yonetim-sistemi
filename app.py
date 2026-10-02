@@ -204,11 +204,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-sekme_saha, sekme_giris, sekme_yonetici, sekme_raporlar, sekme_ayarlar = st.tabs([
+# 4 SEKME (Üst Yönetim Raporları silindi)
+sekme_saha, sekme_giris, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ",
     "📦 GİRİŞ KALİTE KONTROL",
     "📊 YÖNETİCİ PANELİ & ANALİZ",
-    "📈 ÜST YÖNETİM RAPORLARI",
     "⚙️ YÖNETİM & AYARLAR",
 ])
 
@@ -241,7 +241,7 @@ with sekme_saha:
 
     if st.button("KAYDET VE GÖNDER", use_container_width=True):
         if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
-            st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
+            st.warning("⚠️️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         else:
             belge_linkleri = dosyalari_yukle(yuklenen_dosyalar) if yuklenen_dosyalar else []
             kayit = {
@@ -314,7 +314,7 @@ with sekme_giris:
             else:
                 st.error("❌ Kayıt gönderilirken bir hata oluştu!")
 
-# --- 3. SEKME ---
+# --- 3. SEKME: YÖNETİCİ PANELİ & ANALİZ ---
 with sekme_yonetici:
     st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
     if st.button("🔄 Verileri Yenile", key="btn_yenile_yonetici"):
@@ -323,7 +323,7 @@ with sekme_yonetici:
         giris_kalite_yukle.clear()
         st.rerun()
 
-    alt_sekme1, alt_sekme2 = st.tabs(["⚙️ SAHA KALİTE ANALİZLERİ", "📦 GİRİŞ KALİTE & TEDARİKÇİ ROL ANALİZLERİ"])
+    alt_sekme1, alt_sekme2 = st.tabs(["⚙️ SAHA KALİTE ANALİZLERİ", "📦 GİRİŞ KALİTE & TEDARİKÇİ ROL VE ANALİZLERİ"])
 
     with alt_sekme1:
         df = verileri_yukle()
@@ -337,120 +337,111 @@ with sekme_yonetici:
         df_gkk = giris_kalite_yukle()
         if not df_gkk.empty:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
-            gkk_cols = {str(c).strip().lower(): c for c in df_gkk.columns}
+            cols_map = {c.lower(): c for c in df_gkk.columns}
             
-            col_onay = next((v for k, v in gkk_cols.items() if "onay" in k), None)
-            col_firma = next((v for k, v in gkk_cols.items() if "firma" in k or "tedarikçi" in k or "company" in k), None)
+            c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k or "timestamp" in k), df_gkk.columns[0])
+            c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
+            c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
+            c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
+            c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
+            c_puan = next((cols_map[k] for k in cols_map if "puan" in k or "100" in k), None)
 
-            toplam_gkk_kayit = len(df_gkk)
-            kabul_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("KABUL", na=False)]) if col_onay else 0
-            sartli_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("ŞARTLI", na=False)]) if col_onay else 0
-            red_sayisi = len(df_gkk[df_gkk[col_onay].astype(str).str.upper().str.contains("RED", na=False)]) if col_onay else 0
-
-            m_g1, m_g2, m_g3, m_g4 = st.columns(4)
-            m_g1.metric("Toplam Gelen Parti", f"{toplam_gkk_kayit} Parti")
-            m_g2.metric("✅ Kabul Edilen", f"{kabul_sayisi} Parti")
-            m_g3.metric("⚠️ Şartlı Kabul", f"{sartli_sayisi} Parti")
-            m_g4.metric("❌ Red Edilen", f"{red_sayisi} Parti")
-
-            st.markdown("---")
-            col_chart1, col_chart2 = st.columns(2)
-
-            with col_chart1:
-                st.subheader("📊 Onay Durumu Dağılımı")
-                if col_onay:
-                    onay_df = df_gkk[col_onay].value_counts().reset_index()
-                    onay_df.columns = ["Onay Durumu", "Sayı"]
-                    if not onay_df.empty:
-                        donut_chart = alt.Chart(onay_df).mark_arc(innerRadius=60).encode(
-                            theta=alt.Theta(field="Sayı", type="quantitative"),
-                            color=alt.Color(field="Onay Durumu", type="nominal"),
-                            tooltip=["Onay Durumu", "Sayı"]
-                        ).properties(height=340)
-                        st.altair_chart(donut_chart, use_container_width=True)
-
-            with col_chart2:
-                st.subheader("🏢 Tedarikçi Kontrol Dağılımı")
-                if col_firma:
-                    firma_df = df_gkk[col_firma].value_counts().reset_index()
-                    firma_df.columns = ["Tedarikçi", "Parti Sayısı"]
-                    if not firma_df.empty:
-                        firma_chart = alt.Chart(firma_df).mark_bar(color="#6366F1").encode(
-                            x=alt.X("Parti Sayısı:Q"), y=alt.Y("Tedarikçi:N", sort="-x"), tooltip=["Tedarikçi", "Parti Sayısı"]
-                        ).properties(height=340)
-                        st.altair_chart(firma_chart, use_container_width=True)
-
-            st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
-            st.dataframe(df_gkk, use_container_width=True)
-        else:
-            st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
-
-# --- 4. SEKME: ÜST YÖNETİM RAPORLARI ---
-with sekme_raporlar:
-    st.header("📈 Üst Yönetim Kalite ve Tedarikçi Değerlendirme Raporu")
-    
-    df_gkk = giris_kalite_yukle()
-    if not df_gkk.empty:
-        df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
-        cols_map = {c.lower(): c for c in df_gkk.columns}
-        
-        c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k or "timestamp" in k), df_gkk.columns[0])
-        c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
-        c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
-        c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
-        c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
-        c_puan = next((cols_map[k] for k in cols_map if "puan" in k or "100" in k), None)
-
-        toplam_parti = len(df_gkk)
-        ortalama_puan = 0.0
-        
-        # En düşük / en yüksek puan ve firma tespiti için hazırlık
-        min_puan, max_puan = None, None
-        min_firma, max_firma = "-", "-"
-        
-        if c_puan and not df_gkk.empty:
-            puan_serisi = pd.to_numeric(df_gkk[c_puan], errors="coerce")
-            if puan_serisi.notna().any():
-                ortalama_puan = round(puan_serisi.mean(), 2)
-                min_idx = puan_serisi.idxmin()
-                max_idx = puan_serisi.idxmax()
-                min_puan = puan_serisi.loc[min_idx]
-                max_puan = puan_serisi.loc[max_idx]
-                if c_firma:
-                    min_firma = str(df_gkk.loc[min_idx, c_firma])
-                    max_firma = str(df_gkk.loc[max_idx, c_firma])
-
-        # --- AÇILIR MENÜ EN ÜSTTE ---
-        with st.expander("📊 Yönetim Özet Tablosu İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek)", expanded=True):
+            toplam_parti = len(df_gkk)
+            ortalama_puan = 0.0
+            min_puan, max_puan = None, None
+            min_firma, max_firma = "-", "-"
+            
             if c_puan:
+                puan_serisi = pd.to_numeric(df_gkk[c_puan], errors="coerce")
+                if puan_serisi.notna().any():
+                    ortalama_puan = round(puan_serisi.mean(), 2)
+                    min_idx = puan_serisi.idxmin()
+                    max_idx = puan_serisi.idxmax()
+                    min_puan = puan_serisi.loc[min_idx]
+                    max_puan = puan_serisi.loc[max_idx]
+                    if c_firma:
+                        min_firma = str(df_gkk.loc[min_idx, c_firma])
+                        max_firma = str(df_gkk.loc[max_idx, c_firma])
+
+            # --- AÇILIR MENÜ (EXPANDER) EN ÜSTTE ---
+            with st.expander("📊 Yönetim Özet Tablosu İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek)", expanded=True):
                 col_st1, col_st2, col_st3, col_st4 = st.columns(4)
                 col_st1.metric("TOPLAM ADET", f"{toplam_parti}")
                 col_st2.metric("ORTALAMA", f"{ortalama_puan}")
                 col_st3.metric("EN KÜÇÜK PUAN & FİRMA", f"{min_puan}", f"{min_firma}")
                 col_st4.metric("EN BÜYÜK PUAN & FİRMA", f"{max_puan}", f"{max_firma}")
 
-        st.markdown("---")
-        
-        col_r1, col_r2 = st.columns(2)
-        col_r1.metric("Toplam Raporlanan Parti", f"{toplam_parti} Adet")
-        col_r2.metric("Genel Ortalama Değerlendirme", f"{ortalama_puan} / 100")
+            st.markdown("---")
 
-        st.markdown("---")
-        st.subheader("📋 Resmi Yönetim Tablosu (Excel Standardı)")
+            # --- HAFTALIK GRUPPAMA VE GRAFİK DÜZENİ ---
+            col_ tablo, col_grafik = st.columns([1.3, 0.7])
 
-        yonetim_df = pd.DataFrame()
-        yonetim_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
-        yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
-        yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
-        yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
-        yonetim_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
-        yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
+            with col_tablo:
+                st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
+                
+                # Tarih sütununu datetime'a çevirip hafta hesaplayalım
+                if c_tarih:
+                    df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce")
+                    # ISO hafta numarasını alalım
+                    df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(0).astype(int)
+                    
+                    # Haftaları gruplayarak alt alta sıralayalım
+                    haftalar = sorted(df_gkk["_hafta"].unique(), reverse=True)
+                    
+                    for h in haftalar:
+                        h_df = df_gkk[df_gkk["_hafta"] == h]
+                        if h_df.empty:
+                            continue
+                        
+                        # Hafta başlangıç ve bitiş tarih aralığını bulalım
+                        min_t = h_df["_dt"].dt.strftime("%d.%m.%Y").min()
+                        max_t = h_df["_dt"].dt.strftime("%d.%m.%Y").max()
+                        
+                        baslik = f"📌 {h}. Hafta ({min_t} / {max_t})" if min_t else f"📌 {h}. Hafta Raporu"
+                        
+                        with st.expander(baslik, expanded=True):
+                            sub_df = pd.DataFrame()
+                            sub_df["Tarih / Date"] = h_df[c_tarih]
+                            sub_df["Gelen Ürün Tipi ve Ölçüsü"] = h_df[c_urun] if c_urun else "-"
+                            sub_df["Gelen Ürün Şirket"] = h_df[c_firma] if c_firma else "-"
+                            sub_df["RAPOR NO"] = h_df[c_rapor] if c_rapor else "-"
+                            sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
+                            sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = h_df[c_puan] if c_puan else "-"
+                            
+                            st.dataframe(sub_df, use_container_width=True, hide_index=True)
+                else:
+                    # Tarih sütunu bulunamazsa doğrudan tabloyu göster
+                    yonetim_df = pd.DataFrame()
+                    yonetim_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
+                    yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
+                    yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
+                    yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
+                    yonetim_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
+                    yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
+                    st.dataframe(yonetim_df, use_container_width=True, hide_index=True)
 
-        st.dataframe(yonetim_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("Üst yönetim raporu için henüz veri bulunmuyor.")
+            with col_grafik:
+                st.subheader("📊 Tedarikçi Puan Fikstürü")
+                if c_puan and c_firma:
+                    grafik_df = df_gkk[[c_firma, c_puan]].copy()
+                    grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
+                    grafik_df = grafik_df.dropna()
+                    
+                    if not grafik_df.empty:
+                        puan_chart = alt.Chart(grafik_df).mark_bar(color="#2563EB", cornerRadiusEnd=6).encode(
+                            x=alt.X(f"{c_puan}:Q", title="Değerlendirme Puanı (100 üzerinden)"),
+                            y=alt.Y(f"{c_firma}:N", sort="-x", title="Tedarikçi Firma"),
+                            tooltip=[c_firma, c_puan]
+                        ).properties(height=400)
+                        st.altair_chart(puan_chart, use_container_width=True)
+                    else:
+                        st.info("Grafik için yeterli sayısal puan bulunmuyor.")
+                else:
+                    st.info("Puan veya firma sütunu eksik.")
+        else:
+            st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
 
-# --- 5. SEKME ---
+# --- 4. SEKME: YÖNETİM & AYARLAR ---
 with sekme_ayarlar:
     st.header("Personel ve Parça Listesini Yönet")
     col_p1, col_p2 = st.columns(2)
