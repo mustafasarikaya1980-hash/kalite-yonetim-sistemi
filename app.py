@@ -204,7 +204,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 4 SEKME (Üst Yönetim Raporları silindi)
+# 4 SEKME
 sekme_saha, sekme_giris, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📱 SAHA VERİ GİRİŞİ",
     "📦 GİRİŞ KALİTE KONTROL",
@@ -241,7 +241,7 @@ with sekme_saha:
 
     if st.button("KAYDET VE GÖNDER", use_container_width=True):
         if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
-            st.warning("⚠️️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
+            st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         else:
             belge_linkleri = dosyalari_yukle(yuklenen_dosyalar) if yuklenen_dosyalar else []
             kayit = {
@@ -374,18 +374,15 @@ with sekme_yonetici:
             st.markdown("---")
 
             # --- HAFTALIK GRUPPAMA VE GRAFİK DÜZENİ ---
-            col_ tablo, col_grafik = st.columns([1.3, 0.7])
+            col_tablo, col_grafik = st.columns([1.3, 0.7])
 
             with col_tablo:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
                 
-                # Tarih sütununu datetime'a çevirip hafta hesaplayalım
                 if c_tarih:
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce")
-                    # ISO hafta numarasını alalım
                     df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(0).astype(int)
                     
-                    # Haftaları gruplayarak alt alta sıralayalım
                     haftalar = sorted(df_gkk["_hafta"].unique(), reverse=True)
                     
                     for h in haftalar:
@@ -393,7 +390,6 @@ with sekme_yonetici:
                         if h_df.empty:
                             continue
                         
-                        # Hafta başlangıç ve bitiş tarih aralığını bulalım
                         min_t = h_df["_dt"].dt.strftime("%d.%m.%Y").min()
                         max_t = h_df["_dt"].dt.strftime("%d.%m.%Y").max()
                         
@@ -410,7 +406,6 @@ with sekme_yonetici:
                             
                             st.dataframe(sub_df, use_container_width=True, hide_index=True)
                 else:
-                    # Tarih sütunu bulunamazsa doğrudan tabloyu göster
                     yonetim_df = pd.DataFrame()
                     yonetim_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
                     yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
