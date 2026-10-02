@@ -64,8 +64,10 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# 3. Giriş Kalite Kontrol Formu
+# 3. Giriş Kalite Kontrol Formu (Yeni Tarih ve Rapor No Alanları Eklendi)
 GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
+GKK_ENTRY_TARIH = "entry.1982855167"      # Yeni Eklenen Tarih Alanı
+GKK_ENTRY_RAPOR = "entry.1205608639"      # Yeni Eklenen Rapor No Alanı
 GKK_ENTRY_URUN = "entry.1393152516"
 GKK_ENTRY_FIRMA = "entry.1427845717"
 GKK_ENTRY_IRSALIYE = "entry.1390158217"
@@ -167,6 +169,8 @@ def veri_kaydet(yeni_veri: dict) -> bool:
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
     payload = {
+        GKK_ENTRY_TARIH: gkk_veri["tarih"],
+        GKK_ENTRY_RAPOR: gkk_veri["rapor_no"],
         GKK_ENTRY_URUN: gkk_veri["urun"],
         GKK_ENTRY_FIRMA: gkk_veri["firma"],
         GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
@@ -265,10 +269,11 @@ with sekme_giris:
     gkk_fk = f"gkk_{st.session_state.form_key}"
     col_gkk1, col_gkk2 = st.columns(2)
     with col_gkk1:
+        gkk_tarih = st.date_input("Tarih", key=f"gkk_tarih_{gkk_fk}")
+        gkk_rapor_no = st.text_input("Rapor No", placeholder="Örn: KK1-260328", key=f"gkk_rapor_no_{gkk_fk}")
         gkk_urun = st.text_input("Gelen Ürün Tipi ve Ölçüsü / İsmi", placeholder="Örn: 6\"x8\" KARBON BURÇ", key=f"gkk_urun_{gkk_fk}")
         gkk_firma = st.text_input("Tedarikçi Firma", placeholder="Örn: SIRMA", key=f"gkk_firma_{gkk_fk}")
         gkk_irsaliye = st.text_input("İrsaliye No", placeholder="Örn: EFT2026000000008", key=f"gkk_irsaliye_{gkk_fk}")
-        gkk_tarih = st.date_input("İrsaliye Tarihi", key=f"gkk_tarih_{gkk_fk}")
 
     with col_gkk2:
         col_m1, col_m2 = st.columns(2)
@@ -284,7 +289,6 @@ with sekme_giris:
     col_gkk3, col_gkk4 = st.columns(2)
     with col_gkk3:
         gkk_onay = st.selectbox("Onay Durumu", ["KABUL", "ŞARTLI KABUL", "RED"], key=f"gkk_onay_{gkk_fk}")
-        gkk_rapor_no = st.text_input("Rapor No", placeholder="Örn: KK2-260035", key=f"gkk_rapor_no_{gkk_fk}")
         gkk_aciklama = st.text_area("Ek Açıklama", placeholder="Açıklama...", key=f"gkk_aciklama_{gkk_fk}")
 
     with col_gkk4:
@@ -301,11 +305,10 @@ with sekme_giris:
             st.warning("⚠️ Lütfen Gelen Ürün Tipi ve Tedarikçi Firma alanlarını doldurunuz!")
         else:
             gkk_kayit = {
-                "tarih": str(gkk_tarih), "urun": gkk_urun, "firma": gkk_firma,
+                "tarih": str(gkk_tarih), "rapor_no": gkk_rapor_no, "urun": gkk_urun, "firma": gkk_firma,
                 "irsaliye": gkk_irsaliye, "miktar": gkk_miktar, "birim": gkk_birim,
                 "numune": gkk_numune, "red_numune": gkk_red_numune, "frekans": gkk_frekans,
-                "onay": gkk_onay, "rapor_no": gkk_rapor_no, "aciklama": gkk_aciklama,
-                "tedarikci_puani": genel_puan
+                "onay": gkk_onay, "aciklama": gkk_aciklama, "tedarikci_puani": genel_puan
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
@@ -339,7 +342,7 @@ with sekme_yonetici:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
             
-            c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k or "timestamp" in k), df_gkk.columns[0])
+            c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k), df_gkk.columns[0])
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
             c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
