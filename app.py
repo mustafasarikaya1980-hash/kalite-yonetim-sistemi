@@ -289,12 +289,12 @@ with sekme_giris:
 
     with col_gkk4:
         st.subheader("⭐ Tedarikçi Değerlendirme Puanları (0-100)")
-        p_paket = st.slider("Paketleme Puanı", 0, 100, 80, key=f"p_paket_{gkk_fk}")
-        p_sevkiyat = st.slider("Sevkiyat Puanı", 0, 100, 80, key=f"p_sevkiyat_{gkk_fk}")
-        p_kalite = st.slider("Ürün Kalitesi Puanı", 0, 100, 80, key=f"p_kalite_{gkk_fk}")
-        p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 80, key=f"p_etiket_{gkk_fk}")
-        genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 1)
-        st.metric("Genel Tedarikçi Puanı", f"{genel_puan}")
+        p_paket = st.slider("Paketleme Puanı", 0, 100, 70, key=f"p_paket_{gkk_fk}")
+        p_sevkiyat = st.slider("Sevkiyat Puanı", 0, 100, 70, key=f"p_sevkiyat_{gkk_fk}")
+        p_kalite = st.slider("Ürün Kalitesi Puanı", 0, 100, 70, key=f"p_kalite_{gkk_fk}")
+        p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 70, key=f"p_etiket_{gkk_fk}")
+        genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
+        st.metric("100 Üzerinden Değerlendirme", f"{genel_puan}")
 
     if st.button("GİRİŞ KALİTE KAYDINI KAYDET", use_container_width=True):
         if not gkk_urun or not gkk_firma:
@@ -309,7 +309,7 @@ with sekme_giris:
             }
             if giris_kalite_kaydet(gkk_kayit):
                 st.session_state.form_key += 1
-                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı Google Form üzerinden ana e-tablonuza başarıyla işlendi!"
+                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla işlendi!"
                 st.rerun()
             else:
                 st.error("❌ Kayıt gönderilirken bir hata oluştu!")
@@ -383,18 +383,15 @@ with sekme_yonetici:
             st.subheader("📋 Giriş Kalite Kontrol Detaylı Veri Tablosu")
             st.dataframe(df_gkk, use_container_width=True)
         else:
-            st.info("Giriş Kalite Kontrol sekmesinde şu an veri görünmüyor.")
+            st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
 
-# --- 4. SEKME: ÜST YÖNETİM RAPORLARI (Sizin Excel Tablonuzun Birebir Formatı) ---
+# --- 4. SEKME: ÜST YÖNETİM RAPORLARI ---
 with sekme_raporlar:
     st.header("📈 Üst Yönetim Kalite ve Tedarikçi Değerlendirme Raporu")
-    st.markdown("Üst yönetime sunduğunuz resmi formata uygun olarak düzenlenmiş giriş kalite ve tedarikçi değerlendirme tablosu aşağıdadır.")
     
     df_gkk = giris_kalite_yukle()
     if not df_gkk.empty:
         df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
-        
-        # Sizin Excel sütunlarınıza karşılık gelen kolon eşleştirmelerini dinamik yakalayalım
         cols_map = {c.lower(): c for c in df_gkk.columns}
         
         c_tarih = next((cols_map[k] for k in cols_map if "tarih" in k or "timestamp" in k), df_gkk.columns[0])
@@ -404,43 +401,52 @@ with sekme_raporlar:
         c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
         c_puan = next((cols_map[k] for k in cols_map if "puan" in k or "100" in k), None)
 
-        # Üst Yönetim Özet Metrikleri
         toplam_parti = len(df_gkk)
-        
-        # Ortalama değerlendirme puanı hesaplama
         ortalama_puan = 0.0
-        if c_puan and pd.to_numeric(df_gkk[c_puan], errors="coerce").notna().any():
-            ortalama_puan = round(pd.to_numeric(df_gkk[c_puan], errors="coerce").mean(), 2)
+        
+        # En düşük / en yüksek puan ve firma tespiti için hazırlık
+        min_puan, max_puan = None, None
+        min_firma, max_firma = "-", "-"
+        
+        if c_puan and not df_gkk.empty:
+            puan_serisi = pd.to_numeric(df_gkk[c_puan], errors="coerce")
+            if puan_serisi.notna().any():
+                ortalama_puan = round(puan_serisi.mean(), 2)
+                min_idx = puan_serisi.idxmin()
+                max_idx = puan_serisi.idxmax()
+                min_puan = puan_serisi.loc[min_idx]
+                max_puan = puan_serisi.loc[max_idx]
+                if c_firma:
+                    min_firma = str(df_gkk.loc[min_idx, c_firma])
+                    max_firma = str(df_gkk.loc[max_idx, c_firma])
 
-        col_r1, col_r2, col_r3 = st.columns(3)
-        col_r1.metric("Toplam Raporlanan Parti", f"{toplam_parti} Adet")
-        col_r2.metric("Genel Ortalama Değerlendirme", f"{ortalama_puan} / 100")
-        col_r3.metric("Rapor Formatı", "Üst Yönetim Standardı")
+        # --- AÇILIR MENÜ EN ÜSTTE ---
+        with st.expander("📊 Yönetim Özet Tablosu İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek)", expanded=True):
+            if c_puan:
+                col_st1, col_st2, col_st3, col_st4 = st.columns(4)
+                col_st1.metric("TOPLAM ADET", f"{toplam_parti}")
+                col_st2.metric("ORTALAMA", f"{ortalama_puan}")
+                col_st3.metric("EN KÜÇÜK PUAN & FİRMA", f"{min_puan}", f"{min_firma}")
+                col_st4.metric("EN BÜYÜK PUAN & FİRMA", f"{max_puan}", f"{max_firma}")
 
         st.markdown("---")
-        st.subheader("📋 Resmi Yönetim Tablosu")
+        
+        col_r1, col_r2 = st.columns(2)
+        col_r1.metric("Toplam Raporlanan Parti", f"{toplam_parti} Adet")
+        col_r2.metric("Genel Ortalama Değerlendirme", f"{ortalama_puan} / 100")
 
-        # Sizin Excel'inizdeki sütun sıralamasına benzer temiz bir görünüm oluşturalım
-        temiz_df = pd.DataFrame()
-        temiz_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
-        temiz_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
-        temiz_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
-        temiz_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
-        temiz_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
-        temiz_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
+        st.markdown("---")
+        st.subheader("📋 Resmi Yönetim Tablosu (Excel Standardı)")
 
-        st.dataframe(temiz_df, use_container_width=True)
+        yonetim_df = pd.DataFrame()
+        yonetim_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
+        yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
+        yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
+        yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
+        yonetim_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
+        yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
 
-        # Excel'deki özet tablonun sayısal dökümü
-        with st.expander("📊 Yönetim Özet İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek)"):
-            if c_puan:
-                puanlar = pd.to_numeric(df_gkk[c_puan], errors="coerce").dropna()
-                if not puanlar.empty:
-                    col_st1, col_st2, col_st3, col_st4 = st.columns(4)
-                    col_st1.metric("TOPLAM PARTİ", f"{len(puanlar)} ADET")
-                    col_st2.metric("ORTALAMA PUAN", f"{round(puanlar.mean(), 2)}")
-                    col_st3.metric("EN KÜÇÜK PUAN", f"{puanlar.min()}")
-                    col_st4.metric("EN BÜYÜK PUAN", f"{puanlar.max()}")
+        st.dataframe(yonetim_df, use_container_width=True, hide_index=True)
     else:
         st.info("Üst yönetim raporu için henüz veri bulunmuyor.")
 
