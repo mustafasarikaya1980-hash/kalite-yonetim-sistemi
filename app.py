@@ -76,7 +76,7 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?forma
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
 
-# Güncel Apps Script Web App URL'i entegre edilmiştir
+# Güncel Apps Script Web App URL'i
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3GJDfMyQvRZtLF-MbnuxXmpl-ylaba_ahcYN3UZxMhdsIJf89VM1ZRtQ9FgbG/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
@@ -167,7 +167,7 @@ def giris_kalite_kaydet(gkk_veri: dict) -> bool:
                 giris_kalite_yukle.clear()
                 return True
         return False
-    except Exception as e:
+    except Exception:
         return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
@@ -292,7 +292,7 @@ with sekme_giris:
 
         if st.button("🚀 Verileri Kaydet ve E-Tabloya Gönder", use_container_width=True):
             if not gkk_urun or not gkk_firma:
-                st.warning("⚠️️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
+                st.warning("⚠️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
             else:
                 gkk_kayit = {
                     "tarih": gkk_tarih.strftime("%d.%m.%Y"), 
@@ -384,4 +384,74 @@ with sekme_yonetici:
                 
                 if c_tarih:
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce")
-                    df_gkk["_hafta"] = df_
+                    df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
+                    
+                    haftalar = sorted(df_gkk["_hafta"].unique(), reverse=True)
+                    
+                    for h in haftalar:
+                        h_df = df_gkk[df_gkk["_hafta"] == h]
+                        if h_df.empty:
+                            continue
+                        
+                        min_t = h_df["_dt"].dt.strftime("%d.%m.%Y").min()
+                        max_t = h_df["_dt"].dt.strftime("%d.%m.%Y").max()
+                        
+                        baslik = f"📌 {h}. Hafta ({min_t} / {max_t})" if pd.notna(min_t) else f"📌 {h}. Hafta Raporu"
+                        
+                        with st.expander(baslik, expanded=True):
+                            sub_df = pd.DataFrame()
+                            sub_df["Tarih / Date"] = h_df[c_tarih]
+                            sub_df["Gelen Ürün Tipi ve Ölçüsü"] = h_df[c_urun] if c_urun else "-"
+                            sub_df["Gelen Ürün Şirket"] = h_df[c_firma] if c_firma else "-"
+                            sub_df["RAPOR NO"] = h_df[c_rapor] if c_rapor else "-"
+                            sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
+                            sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = h_df[c_puan] if c_puan else "-"
+                            
+                            st.dataframe(sub_df, use_container_width=True, hide_index=True)
+                else:
+                    yonetim_df = pd.DataFrame()
+                    yonetim_df["Tarih / Date"] = "-"
+                    yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
+                    yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
+                    yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
+                    yonetim_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
+                    yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
+                    st.dataframe(yonetim_df, use_container_width=True, hide_index=True)
+
+            with col_grafik:
+                st.subheader("📊 Tedarikçi Puan Fikstürü")
+                if c_puan and c_firma:
+                    grafik_df = df_gkk[[c_firma, c_puan]].copy()
+                    grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
+                    grafik_df = grafik_df.dropna()
+                    
+                    if not grafik_df.empty:
+                        puan_chart = alt.Chart(grafik_df).mark_bar(color="#2563EB", cornerRadiusEnd=6).encode(
+                            x=alt.X(f"{c_puan}:Q", title="Değerlendirme Puanı (100 üzerinden)"),
+                            y=alt.Y(f"{c_firma}:N", sort="-x", title="Tedarikçi Firma"),
+                            tooltip=[c_firma, c_puan]
+                        ).properties(height=400)
+                        st.altair_chart(puan_chart, use_container_width=True)
+                    else:
+                        st.info("Grafik için yeterli sayısal puan bulunmuyor.")
+                else:
+                    st.info("Puan veya firma sütunu eksik.")
+        else:
+            st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
+
+# --- 4. SEKME: YÖNETİM & AYARLAR ---
+with sekme_ayarlar:
+    st.header("Personel ve Parça Listesini Yönet")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        yeni_p = st.text_input("Personel Adı Soyadı", key="yeni_p_input")
+        if st.button("Personel Ekle", key="btn_p_ekle") and yeni_p.strip():
+            if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
+                st.success("✅ Personel eklendi!")
+                st.rerun()
+    with col_p2:
+        yeni_parca = st.text_input("Parça Adı", key="yeni_parca_input")
+        if st.button("Parça Ekle", key="btn_parca_ekle") and yeni_parca.strip():
+            if kalici_liste_ekle("PARCA", yeni_parca.strip()):
+                st.success("✅ Parça eklendi!")
+                st.rerun()
