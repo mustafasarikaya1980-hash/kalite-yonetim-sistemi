@@ -311,7 +311,13 @@ with sekme_giris:
                     "firma": gkk_firma,
                     "irsaliye": gkk_irsaliye,
                     "onay": gkk_onay,
-                    "tedarikci_puani": genel_puan
+                    "tedarikci_puani": genel_puan,
+                    "miktar": gkk_miktar,
+                    "birim": gkk_birim,
+                    "numune": gkk_numune,
+                    "red_numune": gkk_red_numune,
+                    "frekans": gkk_frekans,
+                    "aciklama": gkk_aciklama,
                 }
                 if giris_kalite_kaydet(gkk_kayit):
                     st.session_state.form_key += 1
@@ -361,7 +367,11 @@ with sekme_yonetici:
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k or "şirket" in k), None)
             c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
             c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
-            c_puan = next((cols_map[k] for k in cols_map if "puan" in k or "100" in k), None)
+            # Puan sütunu: adayların içinden en çok sayısal değer içereni seç
+            _puan_adaylari = [c for c in df_gkk.columns if any(x in c.lower() for x in ("puan", "100", "değerlendirme"))]
+            c_puan = None
+            if _puan_adaylari:
+                c_puan = max(_puan_adaylari, key=lambda c: pd.to_numeric(df_gkk[c], errors="coerce").notna().sum())
 
             toplam_parti = len(df_gkk)
             ortalama_puan = 0.0
@@ -397,21 +407,21 @@ with sekme_yonetici:
                 if c_tarih:
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
                     df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
+                    # Haftanın başlangıcı (Pazartesi) - yıl farkını da ayırmak için gruplama anahtarı
+                    df_gkk["_hafta_bas"] = (df_gkk["_dt"].dt.normalize() - pd.to_timedelta(df_gkk["_dt"].dt.weekday, unit="D"))
 
-                    haftalar = sorted(df_gkk["_hafta"].unique(), reverse=True)
+                    hafta_anahtarlari = sorted(df_gkk["_hafta_bas"].dropna().unique(), reverse=True)
+                    gecersiz_df = df_gkk[df_gkk["_hafta_bas"].isna()]
 
-                    for h in haftalar:
-                        h_df = df_gkk[df_gkk["_hafta"] == h]
+                    for hb in hafta_anahtarlari:
+                        h_df = df_gkk[df_gkk["_hafta_bas"] == hb]
                         if h_df.empty:
                             continue
 
-                        min_t = h_df["_dt"].min()
-                        max_t = h_df["_dt"].max()
-
-                        if pd.notna(min_t) and pd.notna(max_t):
-                            baslik = f"📌 {h}. Hafta ({min_t.strftime('%d.%m.%Y')} / {max_t.strftime('%d.%m.%Y')})"
-                        else:
-                            baslik = f"📌 {h}. Hafta Raporu"
+                        hafta_bas = pd.Timestamp(hb)
+                        hafta_son = hafta_bas + pd.Timedelta(days=6)   # Pazar
+                        h = int(h_df["_hafta"].iloc[0])
+                        baslik = f"📌 {h}. Hafta ({hafta_bas.strftime('%d.%m.%Y')} Pazartesi / {hafta_son.strftime('%d.%m.%Y')} Pazar)"
 
                         with st.expander(baslik, expanded=True):
                             sub_df = pd.DataFrame()
@@ -423,6 +433,10 @@ with sekme_yonetici:
                             sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = h_df[c_puan] if c_puan else "-"
 
                             st.dataframe(sub_df, use_container_width=True, hide_index=True)
+
+                    if not gecersiz_df.empty:
+                        with st.expander("⚠️ Tarihi okunamayan kayıtlar", expanded=False):
+                            st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas"], errors="ignore"), use_container_width=True, hide_index=True)
                 else:
                     yonetim_df = pd.DataFrame()
                     yonetim_df["Tarih / Date"] = "-"
@@ -451,6 +465,29 @@ with sekme_yonetici:
                         st.info("Grafik için yeterli sayısal puan bulunmuyor.")
                 else:
                     st.info("Puan veya firma sütunu eksik.")
+
+            # --- Tedarikçi bazında aylık puan trendi ---
+            st.markdown("---")
+            st.subheader("📈 Tedarikçi Bazında Aylık Puan Trendi")
+            if c_puan and c_firma and "_dt" in df_gkk.columns:
+                trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
+                trend_df[c_puan] = pd.to_numeric(trend_df[c_puan], errors="coerce")
+                trend_df = trend_df.dropna()
+                if not trend_df.empty:
+                    trend_df["Ay"] = trend_df["_dt"].dt.to_period("M").dt.to_timestamp()
+                    aylik = trend_df.groupby(["Ay", c_firma], as_index=False)[c_puan].mean()
+                    aylik[c_puan] = aylik[c_puan].round(2)
+                    trend_chart = alt.Chart(aylik).mark_line(point=True).encode(
+                        x=alt.X("Ay:T", title="Ay", axis=alt.Axis(format="%m.%Y")),
+                        y=alt.Y(f"{c_puan}:Q", title="Ortalama Puan", scale=alt.Scale(domain=[0, 100])),
+                        color=alt.Color(f"{c_firma}:N", title="Tedarikçi"),
+                        tooltip=[alt.Tooltip("Ay:T", format="%m.%Y"), c_firma, c_puan],
+                    ).properties(height=350)
+                    st.altair_chart(trend_chart, use_container_width=True)
+                else:
+                    st.info("Trend için tarihli ve puanlı kayıt bulunmuyor.")
+            else:
+                st.info("Trend için tarih, puan ve firma sütunları gerekli.")
         else:
             st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
 
