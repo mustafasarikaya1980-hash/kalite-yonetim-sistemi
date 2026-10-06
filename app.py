@@ -258,7 +258,7 @@ with sekme_saha:
                 st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
                 st.rerun()
 
-# --- 2. SEKME (Görsel Tasarım Entegrasyonu) ---
+# --- 2. SEKME ---
 with sekme_giris:
     st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
     st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri hem sisteme kaydedilir hem de arka planda Google Formunuza iletilir.")
@@ -349,13 +349,17 @@ with sekme_yonetici:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
             
+            # --- AKILLI TARİH TESPİTİ (B sütunu boşsa Zaman Damgası / A sütununu baz alır) ---
             c_tarih = None
             for col in df_gkk.columns:
                 if "tarih" in col.lower() and "zaman" not in col.lower():
                     c_tarih = col
                     break
-            if not c_tarih and len(df_gkk.columns) > 1:
-                c_tarih = df_gkk.columns[1]
+            
+            if c_tarih and df_gkk[c_tarih].dropna().empty and len(df_gkk.columns) > 0:
+                c_tarih = df_gkk.columns[0] # Zaman damgası (A sütunu)
+            elif not c_tarih and len(df_gkk.columns) > 0:
+                c_tarih = df_gkk.columns[0]
 
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
@@ -395,10 +399,8 @@ with sekme_yonetici:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
                 
                 if c_tarih:
-                    df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], format="%d.%m.%Y", errors="coerce")
-                    df_gkk["_dt"] = df_gkk["_dt"].fillna(pd.to_datetime(df_gkk[c_tarih], errors="coerce"))
-                    
-                    df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(0).astype(int)
+                    df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce")
+                    df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
                     
                     haftalar = sorted(df_gkk["_hafta"].unique(), reverse=True)
                     
@@ -410,7 +412,7 @@ with sekme_yonetici:
                         min_t = h_df["_dt"].dt.strftime("%d.%m.%Y").min()
                         max_t = h_df["_dt"].dt.strftime("%d.%m.%Y").max()
                         
-                        baslik = f"📌 {h}. Hafta ({min_t} / {max_t})" if min_t else f"📌 {h}. Hafta Raporu"
+                        baslik = f"📌 {h}. Hafta ({min_t} / {max_t})" if pd.notna(min_t) else f"📌 {h}. Hafta Raporu"
                         
                         with st.expander(baslik, expanded=True):
                             sub_df = pd.DataFrame()
@@ -424,7 +426,7 @@ with sekme_yonetici:
                             st.dataframe(sub_df, use_container_width=True, hide_index=True)
                 else:
                     yonetim_df = pd.DataFrame()
-                    yonetim_df["Tarih / Date"] = df_gkk[c_tarih] if c_tarih else "-"
+                    yonetim_df["Tarih / Date"] = "-"
                     yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
                     yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
                     yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
