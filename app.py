@@ -180,6 +180,11 @@ def giris_kalite_kaydet(gkk_veri: dict) -> bool:
         st.session_state.gkk_hata = f"Bağlantı hatası: {e}"
         return False
 
+def puan_metni(seri):
+    """Puanları sola hizalı, okunur metne çevirir (tabloda sağda taşıp kaybolmasın diye)."""
+    sayi = pd.to_numeric(seri, errors="coerce")
+    return [f"{v:g}" if pd.notna(v) else ("" if pd.isna(o) else str(o)) for v, o in zip(sayi, seri)]
+
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
     try:
@@ -373,6 +378,13 @@ with sekme_yonetici:
             if _puan_adaylari:
                 c_puan = max(_puan_adaylari, key=lambda c: pd.to_numeric(df_gkk[c], errors="coerce").notna().sum())
 
+            with st.expander("🔧 Sütun eşleştirme kontrolü (grafik çalışmazsa buraya bakın)", expanded=False):
+                st.write("E-tablodaki sütun başlıkları:", list(df_gkk.columns))
+                st.write({"Tarih": c_tarih, "Ürün": c_urun, "Firma": c_firma, "Rapor": c_rapor, "Onay": c_onay, "Puan": c_puan})
+                if c_puan:
+                    st.write("Puan sütunundaki ilk değerler:", df_gkk[c_puan].head(10).tolist())
+                    st.write("Sayıya çevrilebilen değer sayısı:", int(pd.to_numeric(df_gkk[c_puan], errors="coerce").notna().sum()))
+
             toplam_parti = len(df_gkk)
             ortalama_puan = 0.0
             min_puan, max_puan = None, None
@@ -430,7 +442,7 @@ with sekme_yonetici:
                             sub_df["Gelen Ürün Şirket"] = h_df[c_firma] if c_firma else "-"
                             sub_df["RAPOR NO"] = h_df[c_rapor] if c_rapor else "-"
                             sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
-                            sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = h_df[c_puan] if c_puan else "-"
+                            sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
                             st.dataframe(sub_df, use_container_width=True, hide_index=True)
 
@@ -444,7 +456,7 @@ with sekme_yonetici:
                     yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
                     yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
                     yonetim_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
-                    yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = df_gkk[c_puan] if c_puan else "-"
+                    yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(df_gkk[c_puan]) if c_puan else "-"
                     st.dataframe(yonetim_df, use_container_width=True, hide_index=True)
 
             with col_grafik:
