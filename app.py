@@ -385,13 +385,34 @@ with sekme_yonetici:
                     st.write("Puan sütunundaki ilk değerler:", df_gkk[c_puan].head(10).tolist())
                     st.write("Sayıya çevrilebilen değer sayısı:", int(pd.to_numeric(df_gkk[c_puan], errors="coerce").notna().sum()))
 
-            toplam_parti = len(df_gkk)
+            # --- Hafta seçimi: istatistikler ve grafik seçilen haftaya göre hesaplanır ---
+            df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
+            df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
+            df_gkk["_hafta_bas"] = (df_gkk["_dt"].dt.normalize() - pd.to_timedelta(df_gkk["_dt"].dt.weekday, unit="D"))
+
+            TUM_HAFTALAR = "📅 Tüm Haftalar"
+            hafta_secenekleri = {TUM_HAFTALAR: None}
+            for _hb in sorted(df_gkk["_hafta_bas"].dropna().unique(), reverse=True):
+                _bas = pd.Timestamp(_hb)
+                _son = _bas + pd.Timedelta(days=6)
+                _no = int(df_gkk.loc[df_gkk["_hafta_bas"] == _hb, "_hafta"].iloc[0])
+                hafta_secenekleri[f"{_no}. Hafta ({_bas.strftime('%d.%m.%Y')} Pazartesi / {_son.strftime('%d.%m.%Y')} Pazar)"] = _hb
+
+            secilen_hafta = st.selectbox(
+                "🔎 Hafta seçin (özet istatistikler ve puan grafiği seçilen haftaya göre güncellenir)",
+                list(hafta_secenekleri.keys()),
+                key="secilen_hafta",
+            )
+            _secilen_anahtar = hafta_secenekleri[secilen_hafta]
+            df_sec = df_gkk if _secilen_anahtar is None else df_gkk[df_gkk["_hafta_bas"] == _secilen_anahtar]
+
+            toplam_parti = len(df_sec)
             ortalama_puan = 0.0
             min_puan, max_puan = None, None
             min_firma, max_firma = "-", "-"
 
             if c_puan:
-                puan_serisi = pd.to_numeric(df_gkk[c_puan], errors="coerce")
+                puan_serisi = pd.to_numeric(df_sec[c_puan], errors="coerce")
                 if puan_serisi.notna().any():
                     ortalama_puan = round(puan_serisi.mean(), 2)
                     min_idx = puan_serisi.idxmin()
@@ -399,15 +420,63 @@ with sekme_yonetici:
                     min_puan = puan_serisi.loc[min_idx]
                     max_puan = puan_serisi.loc[max_idx]
                     if c_firma:
-                        min_firma = str(df_gkk.loc[min_idx, c_firma])
-                        max_firma = str(df_gkk.loc[max_idx, c_firma])
+                        min_firma = str(df_sec.loc[min_idx, c_firma])
+                        max_firma = str(df_sec.loc[max_idx, c_firma])
 
-            with st.expander("📊 Yönetim Özet Tablosu İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek)", expanded=True):
+            with st.expander(f"📊 Yönetim Özet Tablosu İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek) — {secilen_hafta}", expanded=True):
                 col_st1, col_st2, col_st3, col_st4 = st.columns(4)
                 col_st1.metric("TOPLAM ADET", f"{toplam_parti}")
                 col_st2.metric("ORTALAMA", f"{ortalama_puan}")
                 col_st3.metric("EN KÜÇÜK PUAN & FİRMA", f"{min_puan}", f"{min_firma}")
                 col_st4.metric("EN BÜYÜK PUAN & FİRMA", f"{max_puan}", f"{max_firma}")
+
+            st.markdown("---")
+
+            # --- Haftalık yönetici özeti: kaç giriş kalite yapıldı, kim 1., kim sonuncu ---
+            st.subheader("🏆 Haftalık Yönetici Özeti")
+            st.caption("Her hafta için yapılan giriş kalite adedi ile tedarikçi firmaların haftalık ortalama puanına göre 1. ve sonuncu firma.")
+            if c_puan and c_firma:
+                ozet_satirlar = []
+                _kaynak = df_gkk.dropna(subset=["_hafta_bas"])
+                for hb, g in sorted(_kaynak.groupby("_hafta_bas"), key=lambda x: x[0], reverse=True):
+                    bas = pd.Timestamp(hb)
+                    son = bas + pd.Timedelta(days=6)
+                    no = int(g["_hafta"].iloc[0])
+                    puanli = g.assign(_p=pd.to_numeric(g[c_puan], errors="coerce")).dropna(subset=["_p"])
+                    ort = puanli.groupby(c_firma)["_p"].mean().round(2)
+
+                    birinci, sonuncu = "-", "-"
+                    if not ort.empty:
+                        en_yuksek, en_dusuk = ort.max(), ort.min()
+                        b_firmalar = " / ".join(map(str, ort[ort == en_yuksek].index))
+                        birinci = f"{b_firmalar} ({en_yuksek:g})"
+                        if len(ort) > 1 and en_yuksek != en_dusuk:
+                            s_firmalar = " / ".join(map(str, ort[ort == en_dusuk].index))
+                            sonuncu = f"{s_firmalar} ({en_dusuk:g})"
+
+                    ozet_satirlar.append({
+                        "Hafta": f"{no}. Hafta",
+                        "Başlangıç (Pzt)": bas.strftime("%d.%m.%Y"),
+                        "Bitiş (Paz)": son.strftime("%d.%m.%Y"),
+                        "Giriş Kalite Adedi": len(g),
+                        "Firma Sayısı": int(g[c_firma].nunique()),
+                        "1. Firma (Ort. Puan)": birinci,
+                        "Sonuncu Firma (Ort. Puan)": sonuncu,
+                    })
+
+                if ozet_satirlar:
+                    ozet_df = pd.DataFrame(ozet_satirlar)
+                    st.dataframe(ozet_df, use_container_width=True, hide_index=True)
+                    st.download_button(
+                        "⬇️ Haftalık özeti indir (CSV)",
+                        data=ozet_df.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="haftalik_giris_kalite_ozeti.csv",
+                        mime="text/csv",
+                    )
+                else:
+                    st.info("Haftalık özet için tarihli kayıt bulunmuyor.")
+            else:
+                st.info("Haftalık özet için puan ve firma sütunları gerekli.")
 
             st.markdown("---")
 
@@ -461,8 +530,9 @@ with sekme_yonetici:
 
             with col_grafik:
                 st.subheader("📊 Tedarikçi Puan Fikstürü")
+                st.caption(f"Gösterilen: {secilen_hafta}")
                 if c_puan and c_firma:
-                    grafik_df = df_gkk[[c_firma, c_puan]].copy()
+                    grafik_df = df_sec[[c_firma, c_puan]].copy()
                     grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
                     grafik_df = grafik_df.dropna()
 
