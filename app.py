@@ -76,8 +76,9 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?forma
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
 
-# Güncel Apps Script Web App URL'i
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3GJDfMyQvRZtLF-MbnuxXmpl-ylaba_ahcYN3UZxMhdsIJf89VM1ZRtQ9FgbG/exec"
+# Güncel Apps Script Web App URL'i (6 numaralı sürüm dağıtımı)
+# ÖNEMLİ: Apps Script'te "Web uygulaması > URL > Kopyala" ile aldığınız adresle birebir aynı olmalı.
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9xKz14pVGDNPDkUlUsztvrOK6WEAUOmbXDWBNcpwL70lcg8QRR1AVwKNEXAEoi40P/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
@@ -87,6 +88,8 @@ if "mesaj" not in st.session_state:
     st.session_state.mesaj = None
 if "gkk_mesaj" not in st.session_state:
     st.session_state.gkk_mesaj = None
+if "gkk_hata" not in st.session_state:
+    st.session_state.gkk_hata = None
 
 @st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
@@ -159,15 +162,22 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
+    """Giriş kalite kaydını Apps Script'e gönderir. Hata olursa nedenini session_state.gkk_hata içine yazar."""
+    st.session_state.gkk_hata = None
     try:
-        resp = requests.post(APPS_SCRIPT_URL, json={"veri": gkk_veri}, headers=_HEADERS, timeout=15)
-        if resp.status_code in (200, 302):
+        resp = requests.post(APPS_SCRIPT_URL, json={"veri": gkk_veri}, headers=_HEADERS, timeout=30)
+        try:
             sonuc = resp.json()
-            if sonuc.get("success"):
-                giris_kalite_yukle.clear()
-                return True
+        except Exception:
+            st.session_state.gkk_hata = f"HTTP {resp.status_code} - Yanıt JSON değil: {resp.text[:300]}"
+            return False
+        if sonuc.get("success"):
+            giris_kalite_yukle.clear()
+            return True
+        st.session_state.gkk_hata = f"Apps Script hatası: {sonuc.get('error')}"
         return False
-    except Exception:
+    except Exception as e:
+        st.session_state.gkk_hata = f"Bağlantı hatası: {e}"
         return False
 
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
@@ -245,13 +255,13 @@ with sekme_saha:
 with sekme_giris:
     st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
     st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri doğrudan Form Yanıtları 7 sekmesine işlenir.")
-    
+
     if st.session_state.gkk_mesaj:
         st.success(st.session_state.gkk_mesaj)
         st.session_state.gkk_mesaj = None
 
     gkk_fk = f"gkk_{st.session_state.form_key}"
-    
+
     with st.container(border=True):
         st.markdown("#### Muayene ve Parça Bilgileri")
         col_gkk1, col_gkk2 = st.columns(2)
@@ -286,7 +296,7 @@ with sekme_giris:
         with p_col2:
             p_kalite = st.slider("Ürün Kalitesi Puanı", 0, 100, 70, key=f"p_kalite_{gkk_fk}")
             p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 70, key=f"p_etiket_{gkk_fk}")
-        
+
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
         st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
 
@@ -295,12 +305,12 @@ with sekme_giris:
                 st.warning("⚠️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
             else:
                 gkk_kayit = {
-                    "tarih": gkk_tarih.strftime("%d.%m.%Y"), 
-                    "rapor_no": gkk_rapor_no, 
-                    "urun": gkk_urun, 
+                    "tarih": gkk_tarih.strftime("%d.%m.%Y"),
+                    "rapor_no": gkk_rapor_no,
+                    "urun": gkk_urun,
                     "firma": gkk_firma,
-                    "irsaliye": gkk_irsaliye, 
-                    "onay": gkk_onay, 
+                    "irsaliye": gkk_irsaliye,
+                    "onay": gkk_onay,
                     "tedarikci_puani": genel_puan
                 }
                 if giris_kalite_kaydet(gkk_kayit):
@@ -309,6 +319,8 @@ with sekme_giris:
                     st.rerun()
                 else:
                     st.error("❌ Kayıt gönderilirken bir hata oluştu!")
+                    if st.session_state.gkk_hata:
+                        st.code(st.session_state.gkk_hata)
 
 # --- 3. SEKME: YÖNETİCİ PANELİ & ANALİZ ---
 with sekme_yonetici:
@@ -334,19 +346,19 @@ with sekme_yonetici:
         if not df_gkk.empty:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
-            
+
             c_tarih = None
             for col in df_gkk.columns:
                 if "tarih" in col.lower() and "zaman" not in col.lower():
                     c_tarih = col
                     break
-            
+
             if not c_tarih or (c_tarih in df_gkk.columns and df_gkk[c_tarih].dropna().empty):
                 if len(df_gkk.columns) > 0:
                     c_tarih = df_gkk.columns[0]
 
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
-            c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
+            c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k or "şirket" in k), None)
             c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
             c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
             c_puan = next((cols_map[k] for k in cols_map if "puan" in k or "100" in k), None)
@@ -355,7 +367,7 @@ with sekme_yonetici:
             ortalama_puan = 0.0
             min_puan, max_puan = None, None
             min_firma, max_firma = "-", "-"
-            
+
             if c_puan:
                 puan_serisi = pd.to_numeric(df_gkk[c_puan], errors="coerce")
                 if puan_serisi.notna().any():
@@ -381,23 +393,26 @@ with sekme_yonetici:
 
             with col_tablo:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
-                
+
                 if c_tarih:
-                    df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce")
+                    df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
                     df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
-                    
+
                     haftalar = sorted(df_gkk["_hafta"].unique(), reverse=True)
-                    
+
                     for h in haftalar:
                         h_df = df_gkk[df_gkk["_hafta"] == h]
                         if h_df.empty:
                             continue
-                        
-                        min_t = h_df["_dt"].dt.strftime("%d.%m.%Y").min()
-                        max_t = h_df["_dt"].dt.strftime("%d.%m.%Y").max()
-                        
-                        baslik = f"📌 {h}. Hafta ({min_t} / {max_t})" if pd.notna(min_t) else f"📌 {h}. Hafta Raporu"
-                        
+
+                        min_t = h_df["_dt"].min()
+                        max_t = h_df["_dt"].max()
+
+                        if pd.notna(min_t) and pd.notna(max_t):
+                            baslik = f"📌 {h}. Hafta ({min_t.strftime('%d.%m.%Y')} / {max_t.strftime('%d.%m.%Y')})"
+                        else:
+                            baslik = f"📌 {h}. Hafta Raporu"
+
                         with st.expander(baslik, expanded=True):
                             sub_df = pd.DataFrame()
                             sub_df["Tarih / Date"] = h_df[c_tarih]
@@ -406,7 +421,7 @@ with sekme_yonetici:
                             sub_df["RAPOR NO"] = h_df[c_rapor] if c_rapor else "-"
                             sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
                             sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = h_df[c_puan] if c_puan else "-"
-                            
+
                             st.dataframe(sub_df, use_container_width=True, hide_index=True)
                 else:
                     yonetim_df = pd.DataFrame()
@@ -424,7 +439,7 @@ with sekme_yonetici:
                     grafik_df = df_gkk[[c_firma, c_puan]].copy()
                     grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
                     grafik_df = grafik_df.dropna()
-                    
+
                     if not grafik_df.empty:
                         puan_chart = alt.Chart(grafik_df).mark_bar(color="#2563EB", cornerRadiusEnd=6).encode(
                             x=alt.X(f"{c_puan}:Q", title="Değerlendirme Puanı (100 üzerinden)"),
