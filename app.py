@@ -260,7 +260,7 @@ with sekme_saha:
 
 # --- 2. SEKME ---
 with sekme_giris:
-    st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
+    st.markdown("### 🛡️️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
     st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri hem sisteme kaydedilir hem de arka planda Google Formunuza iletilir.")
     
     if st.session_state.gkk_mesaj:
@@ -312,10 +312,19 @@ with sekme_giris:
                 st.warning("⚠️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
             else:
                 gkk_kayit = {
-                    "tarih": gkk_tarih.strftime("%d.%m.%Y"), "rapor_no": gkk_rapor_no, "urun": gkk_urun, "firma": gkk_firma,
-                    "irsaliye": gkk_irsaliye, "miktar": gkk_miktar, "birim": gkk_birim,
-                    "numune": gkk_numune, "red_numune": gkk_red_numune, "frekans": gkk_frekans,
-                    "onay": gkk_onay, "aciklama": gkk_aciklama, "tedarikci_puani": genel_puan
+                    "tarih": gkk_tarih.strftime("%d.%m.%Y"), 
+                    "rapor_no": gkk_rapor_no, 
+                    "urun": gkk_urun, 
+                    "firma": gkk_firma,
+                    "irsaliye": gkk_irsaliye, 
+                    "miktar": gkk_miktar, 
+                    "birim": gkk_birim,
+                    "numune": gkk_numune, 
+                    "red_numune": gkk_red_numune, 
+                    "frekans": gkk_frekans,
+                    "onay": gkk_onay, 
+                    "aciklama": gkk_aciklama, 
+                    "tedarikci_puani": genel_puan
                 }
                 if giris_kalite_kaydet(gkk_kayit):
                     st.session_state.form_key += 1
@@ -349,17 +358,16 @@ with sekme_yonetici:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
             
-            # --- AKILLI TARİH TESPİTİ (B sütunu boşsa Zaman Damgası / A sütununu baz alır) ---
+            # --- AKILLI TARİH TESPİTİ ---
             c_tarih = None
             for col in df_gkk.columns:
                 if "tarih" in col.lower() and "zaman" not in col.lower():
                     c_tarih = col
                     break
             
-            if c_tarih and df_gkk[c_tarih].dropna().empty and len(df_gkk.columns) > 0:
-                c_tarih = df_gkk.columns[0] # Zaman damgası (A sütunu)
-            elif not c_tarih and len(df_gkk.columns) > 0:
-                c_tarih = df_gkk.columns[0]
+            if not c_tarih or (c_tarih in df_gkk.columns and df_gkk[c_tarih].dropna().empty):
+                if len(df_gkk.columns) > 0:
+                    c_tarih = df_gkk.columns[0] # Zaman damgası (A sütunu)
 
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
