@@ -505,7 +505,29 @@ with sekme_yonetici:
                         baslik = f"📌 {h}. Hafta ({hafta_bas.strftime('%d.%m.%Y')} Pazartesi / {hafta_son.strftime('%d.%m.%Y')} Pazar)"
 
                         with st.expander(baslik, expanded=True):
+                            # Puana göre sırala: en yüksek (1.) en üstte, en düşük (sonuncu) en altta
+                            if c_puan:
+                                h_df = h_df.assign(_p=pd.to_numeric(h_df[c_puan], errors="coerce"))
+                                h_df = h_df.sort_values("_p", ascending=False, na_position="last", kind="stable")
+                            else:
+                                h_df = h_df.assign(_p=float("nan"))
+                            h_df = h_df.reset_index(drop=True)
+
+                            p_max, p_min = h_df["_p"].max(), h_df["_p"].min()
+                            sira_no = h_df["_p"].rank(method="min", ascending=False)
+
+                            def _sira_metni(i):
+                                p = h_df["_p"].iloc[i]
+                                if pd.isna(p):
+                                    return "-"
+                                if p == p_max:
+                                    return "🥇 1."
+                                if p == p_min and p_max != p_min:
+                                    return "🔻 Sonuncu"
+                                return f"{int(sira_no.iloc[i])}."
+
                             sub_df = pd.DataFrame()
+                            sub_df["Sıra"] = [_sira_metni(i) for i in range(len(h_df))]
                             sub_df["Tarih / Date"] = h_df[c_tarih]
                             sub_df["Gelen Ürün Tipi ve Ölçüsü"] = h_df[c_urun] if c_urun else "-"
                             sub_df["Gelen Ürün Şirket"] = h_df[c_firma] if c_firma else "-"
@@ -513,7 +535,17 @@ with sekme_yonetici:
                             sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
                             sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
-                            st.dataframe(sub_df, use_container_width=True, hide_index=True)
+                            def _renk_satir(satir, _p=h_df["_p"], _mx=p_max, _mn=p_min):
+                                p = _p.iloc[satir.name]
+                                if pd.notna(p):
+                                    if p == _mx:
+                                        return ["background-color: #DCFCE7; color: #14532D; font-weight: 600"] * len(satir)
+                                    if p == _mn and _mx != _mn:
+                                        return ["background-color: #FEE2E2; color: #7F1D1D; font-weight: 600"] * len(satir)
+                                return [""] * len(satir)
+
+                            stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
+                            st.dataframe(stilli, use_container_width=True, hide_index=True)
 
                     if not gecersiz_df.empty:
                         with st.expander("⚠️ Tarihi okunamayan kayıtlar", expanded=False):
