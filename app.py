@@ -64,16 +64,6 @@ FORM2_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd3tGU9I4FX9OfoHT
 ENTRY2_TIP = "entry.1056493377"
 ENTRY2_DEGER = "entry.1752462997"
 
-# 3. Giriş Kalite Kontrol Formu
-GKK_FORM_RESPONSE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIvt5WtIPuMWgszpd04VD4WBP7lsOGaVcdAsY1BfKRG1jPrQ/formResponse"
-GKK_ENTRY_TARIH = "entry.1982855167"      
-GKK_ENTRY_RAPOR = "entry.1205608639"      
-GKK_ENTRY_URUN = "entry.1393152516"
-GKK_ENTRY_FIRMA = "entry.1427845717"
-GKK_ENTRY_IRSALIYE = "entry.1390158217"
-GKK_ENTRY_ONAY = "entry.1302512463"
-GKK_ENTRY_PUAN = "entry.55313535"
-
 SABIT_EPOSTA = "veri@msp-kalite.local"
 
 # ANA E-TABLO VE GKK SEKME GID'Sİ ("Form Yanıtları 7" / 1866719555)
@@ -168,19 +158,10 @@ def veri_kaydet(yeni_veri: dict) -> bool:
         return False
 
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
-    payload = {
-        GKK_ENTRY_TARIH: gkk_veri["tarih"],
-        GKK_ENTRY_RAPOR: gkk_veri["rapor_no"],
-        GKK_ENTRY_URUN: gkk_veri["urun"],
-        GKK_ENTRY_FIRMA: gkk_veri["firma"],
-        GKK_ENTRY_IRSALIYE: gkk_veri["irsaliye"],
-        GKK_ENTRY_ONAY: gkk_veri["onay"],
-        GKK_ENTRY_PUAN: str(gkk_veri["tedarikci_puani"]),
-        "emailAddress": SABIT_EPOSTA,
-    }
     try:
-        resp = requests.post(GKK_FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
-        if resp.status_code in (200, 302):
+        resp = requests.post(APPS_SCRIPT_URL, json={"veri": gkk_veri}, headers=_HEADERS, timeout=15)
+        sonuc = resp.json()
+        if resp.status_code in (200, 302) and sonuc.get("success"):
             giris_kalite_yukle.clear()
             return True
         return False
@@ -260,8 +241,8 @@ with sekme_saha:
 
 # --- 2. SEKME ---
 with sekme_giris:
-    st.markdown("### 🛡️️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
-    st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri hem sisteme kaydedilir hem de arka planda Google Formunuza iletilir.")
+    st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
+    st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri doğrudan Form Yanıtları 7 sekmesine işlenir.")
     
     if st.session_state.gkk_mesaj:
         st.success(st.session_state.gkk_mesaj)
@@ -307,7 +288,7 @@ with sekme_giris:
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
         st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
 
-        if st.button("🚀 Verileri Kaydet ve Google Form'a Gönder", use_container_width=True):
+        if st.button("🚀 Verileri Kaydet ve E-Tabloya Gönder", use_container_width=True):
             if not gkk_urun or not gkk_firma:
                 st.warning("⚠️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
             else:
@@ -317,18 +298,12 @@ with sekme_giris:
                     "urun": gkk_urun, 
                     "firma": gkk_firma,
                     "irsaliye": gkk_irsaliye, 
-                    "miktar": gkk_miktar, 
-                    "birim": gkk_birim,
-                    "numune": gkk_numune, 
-                    "red_numune": gkk_red_numune, 
-                    "frekans": gkk_frekans,
                     "onay": gkk_onay, 
-                    "aciklama": gkk_aciklama, 
                     "tedarikci_puani": genel_puan
                 }
                 if giris_kalite_kaydet(gkk_kayit):
                     st.session_state.form_key += 1
-                    st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı başarıyla işlendi ve Google Form'a gönderildi!"
+                    st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı Form Yanıtları 7 sekmesine başarıyla işlendi!"
                     st.rerun()
                 else:
                     st.error("❌ Kayıt gönderilirken bir hata oluştu!")
@@ -358,7 +333,6 @@ with sekme_yonetici:
             df_gkk.columns = [str(c).strip() for c in df_gkk.columns]
             cols_map = {c.lower(): c for c in df_gkk.columns}
             
-            # --- AKILLI TARİH TESPİTİ ---
             c_tarih = None
             for col in df_gkk.columns:
                 if "tarih" in col.lower() and "zaman" not in col.lower():
@@ -367,7 +341,7 @@ with sekme_yonetici:
             
             if not c_tarih or (c_tarih in df_gkk.columns and df_gkk[c_tarih].dropna().empty):
                 if len(df_gkk.columns) > 0:
-                    c_tarih = df_gkk.columns[0] # Zaman damgası (A sütunu)
+                    c_tarih = df_gkk.columns[0]
 
             c_urun = next((cols_map[k] for k in cols_map if "ürün" in k or "urun" in k), None)
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k), None)
