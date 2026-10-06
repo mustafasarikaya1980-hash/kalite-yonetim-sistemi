@@ -76,7 +76,7 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?forma
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
 
-# Güncel Apps Script Web App URL'i (6 numaralı sürüm dağıtımı)
+# Güncel Apps Script Web App URL'i
 # ÖNEMLİ: Apps Script'te "Web uygulaması > URL > Kopyala" ile aldığınız adresle birebir aynı olmalı.
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9xKz14pVGDNPDkUlUsztvrOK6WEAUOmbXDWBNcpwL70lcg8QRR1AVwKNEXAEoi40P/exec"
 
@@ -378,13 +378,6 @@ with sekme_yonetici:
             if _puan_adaylari:
                 c_puan = max(_puan_adaylari, key=lambda c: pd.to_numeric(df_gkk[c], errors="coerce").notna().sum())
 
-            with st.expander("🔧 Sütun eşleştirme kontrolü (grafik çalışmazsa buraya bakın)", expanded=False):
-                st.write("E-tablodaki sütun başlıkları:", list(df_gkk.columns))
-                st.write({"Tarih": c_tarih, "Ürün": c_urun, "Firma": c_firma, "Rapor": c_rapor, "Onay": c_onay, "Puan": c_puan})
-                if c_puan:
-                    st.write("Puan sütunundaki ilk değerler:", df_gkk[c_puan].head(10).tolist())
-                    st.write("Sayıya çevrilebilen değer sayısı:", int(pd.to_numeric(df_gkk[c_puan], errors="coerce").notna().sum()))
-
             # --- Hafta seçimi: istatistikler ve grafik seçilen haftaya göre hesaplanır ---
             df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
             df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
@@ -432,58 +425,11 @@ with sekme_yonetici:
 
             st.markdown("---")
 
-            # --- Haftalık yönetici özeti: kaç giriş kalite yapıldı, kim 1., kim sonuncu ---
-            st.subheader("🏆 Haftalık Yönetici Özeti")
-            st.caption("Her hafta için yapılan giriş kalite adedi ile tedarikçi firmaların haftalık ortalama puanına göre 1. ve sonuncu firma.")
-            if c_puan and c_firma:
-                ozet_satirlar = []
-                _kaynak = df_gkk.dropna(subset=["_hafta_bas"])
-                for hb, g in sorted(_kaynak.groupby("_hafta_bas"), key=lambda x: x[0], reverse=True):
-                    bas = pd.Timestamp(hb)
-                    son = bas + pd.Timedelta(days=6)
-                    no = int(g["_hafta"].iloc[0])
-                    puanli = g.assign(_p=pd.to_numeric(g[c_puan], errors="coerce")).dropna(subset=["_p"])
-                    ort = puanli.groupby(c_firma)["_p"].mean().round(2)
-
-                    birinci, sonuncu = "-", "-"
-                    if not ort.empty:
-                        en_yuksek, en_dusuk = ort.max(), ort.min()
-                        b_firmalar = " / ".join(map(str, ort[ort == en_yuksek].index))
-                        birinci = f"{b_firmalar} ({en_yuksek:g})"
-                        if len(ort) > 1 and en_yuksek != en_dusuk:
-                            s_firmalar = " / ".join(map(str, ort[ort == en_dusuk].index))
-                            sonuncu = f"{s_firmalar} ({en_dusuk:g})"
-
-                    ozet_satirlar.append({
-                        "Hafta": f"{no}. Hafta",
-                        "Başlangıç (Pzt)": bas.strftime("%d.%m.%Y"),
-                        "Bitiş (Paz)": son.strftime("%d.%m.%Y"),
-                        "Giriş Kalite Adedi": len(g),
-                        "Firma Sayısı": int(g[c_firma].nunique()),
-                        "1. Firma (Ort. Puan)": birinci,
-                        "Sonuncu Firma (Ort. Puan)": sonuncu,
-                    })
-
-                if ozet_satirlar:
-                    ozet_df = pd.DataFrame(ozet_satirlar)
-                    st.dataframe(ozet_df, use_container_width=True, hide_index=True)
-                    st.download_button(
-                        "⬇️ Haftalık özeti indir (CSV)",
-                        data=ozet_df.to_csv(index=False).encode("utf-8-sig"),
-                        file_name="haftalik_giris_kalite_ozeti.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    st.info("Haftalık özet için tarihli kayıt bulunmuyor.")
-            else:
-                st.info("Haftalık özet için puan ve firma sütunları gerekli.")
-
-            st.markdown("---")
-
             col_tablo, col_grafik = st.columns([1.3, 0.7])
 
             with col_tablo:
                 st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
+                st.caption("Satır renkleri: KABUL yeşil, ŞARTLI KABUL sarı, RED kırmızı. Her hafta puana göre sıralıdır (en yüksek en üstte, en düşük en altta).")
 
                 if c_tarih:
                     df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
@@ -502,7 +448,7 @@ with sekme_yonetici:
                         hafta_bas = pd.Timestamp(hb)
                         hafta_son = hafta_bas + pd.Timedelta(days=6)   # Pazar
                         h = int(h_df["_hafta"].iloc[0])
-                        baslik = f"📌 {h}. Hafta ({hafta_bas.strftime('%d.%m.%Y')} Pazartesi / {hafta_son.strftime('%d.%m.%Y')} Pazar)"
+                        baslik = f"📌 {h}. Hafta ({hafta_bas.strftime('%d.%m.%Y')} Pazartesi / {hafta_son.strftime('%d.%m.%Y')} Pazar) — {len(h_df)} giriş kalite"
 
                         with st.expander(baslik, expanded=True):
                             # Puana göre sırala: en yüksek (1.) en üstte, en düşük (sonuncu) en altta
@@ -521,9 +467,9 @@ with sekme_yonetici:
                                 if pd.isna(p):
                                     return "-"
                                 if p == p_max:
-                                    return "🥇 1."
+                                    return "1."
                                 if p == p_min and p_max != p_min:
-                                    return "🔻 Sonuncu"
+                                    return "Sonuncu"
                                 return f"{int(sira_no.iloc[i])}."
 
                             sub_df = pd.DataFrame()
@@ -535,14 +481,19 @@ with sekme_yonetici:
                             sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
                             sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
-                            def _renk_satir(satir, _p=h_df["_p"], _mx=p_max, _mn=p_min):
-                                p = _p.iloc[satir.name]
-                                if pd.notna(p):
-                                    if p == _mx:
-                                        return ["background-color: #DCFCE7; color: #14532D; font-weight: 600"] * len(satir)
-                                    if p == _mn and _mx != _mn:
-                                        return ["background-color: #FEE2E2; color: #7F1D1D; font-weight: 600"] * len(satir)
-                                return [""] * len(satir)
+                            def _renk_satir(satir, _onay=(h_df[c_onay].astype(str) if c_onay else None)):
+                                if _onay is None:
+                                    return [""] * len(satir)
+                                durum = _onay.iloc[satir.name].strip().upper()
+                                if "ŞARTLI" in durum or "SARTLI" in durum:
+                                    renk = "background-color: #FEF9C3; color: #713F12; font-weight: 600"
+                                elif durum in ("RED", "RET") or durum.startswith("RED") or durum.startswith("RET"):
+                                    renk = "background-color: #FEE2E2; color: #7F1D1D; font-weight: 600"
+                                elif "KABUL" in durum:
+                                    renk = "background-color: #DCFCE7; color: #14532D; font-weight: 600"
+                                else:
+                                    renk = ""
+                                return [renk] * len(satir)
 
                             stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
                             st.dataframe(stilli, use_container_width=True, hide_index=True)
