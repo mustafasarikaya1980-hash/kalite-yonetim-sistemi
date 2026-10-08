@@ -101,6 +101,17 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9xKz14pVGDNPDkUlUsz
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
 
+# Bu puanın altında neden yazmak zorunlu
+DUSUK_PUAN_ESIGI = 70
+
+# E-tablodaki alt puan / neden sütun başlıkları (Kod.gs ile aynı olmalı)
+ALT_PUANLAR = [
+    ("Paketleme", "Paketleme Puanı", "Paketleme Nedeni"),
+    ("Sevkiyat", "Sevkiyat Puanı", "Sevkiyat Nedeni"),
+    ("Ürün Kalitesi", "Kalite Puanı", "Kalite Nedeni"),
+    ("Etiket", "Etiket Puanı", "Etiket Nedeni"),
+]
+
 if "form_key" not in st.session_state:
     st.session_state.form_key = 0
 if "mesaj" not in st.session_state:
@@ -328,20 +339,39 @@ with sekme_giris:
         gkk_aciklama = st.text_area("Ek Açıklama / Notlar", placeholder="Açıklama...", key=f"gkk_aciklama_{gkk_fk}")
 
         st.markdown("#### ⭐ Tedarikçi Değerlendirme Puanları (0-100)")
+        st.caption(f"Bir puan {DUSUK_PUAN_ESIGI}'in altındaysa nedenini yazmanız zorunludur (örn: Ambalaj kırılmış).")
+
+        def puan_alani(etiket, anahtar, ornek):
+            puan = st.slider(etiket, 0, 100, 70, key=f"p_{anahtar}_{gkk_fk}")
+            neden = st.text_input(
+                f"{etiket} - Neden / Açıklama",
+                placeholder=ornek,
+                key=f"n_{anahtar}_{gkk_fk}",
+            )
+            if puan < DUSUK_PUAN_ESIGI and not neden.strip():
+                st.markdown(f'<span style="color:#DC2626;font-weight:700;">⚠️ {etiket} düşük, neden yazınız!</span>', unsafe_allow_html=True)
+            return puan, neden.strip()
+
         p_col1, p_col2 = st.columns(2)
         with p_col1:
-            p_paket = st.slider("Paketleme Puanı", 0, 100, 70, key=f"p_paket_{gkk_fk}")
-            p_sevkiyat = st.slider("Sevkiyat Puanı", 0, 100, 70, key=f"p_sevkiyat_{gkk_fk}")
+            p_paket, n_paket = puan_alani("Paketleme Puanı", "paket", "Örn: Ambalaj kırılmış")
+            p_sevkiyat, n_sevkiyat = puan_alani("Sevkiyat Puanı", "sevkiyat", "Örn: 3 gün geç geldi")
         with p_col2:
-            p_kalite = st.slider("Ürün Kalitesi Puanı", 0, 100, 70, key=f"p_kalite_{gkk_fk}")
-            p_etiket = st.slider("Ürün Tanıtım Etiketi", 0, 100, 70, key=f"p_etiket_{gkk_fk}")
+            p_kalite, n_kalite = puan_alani("Ürün Kalitesi Puanı", "kalite", "Örn: Ölçü toleransı dışında")
+            p_etiket, n_etiket = puan_alani("Ürün Tanıtım Etiketi", "etiket", "Örn: Etiket eksik / okunmuyor")
 
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
         st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
 
         if st.button("🚀 Verileri Kaydet ve E-Tabloya Gönder", use_container_width=True):
+            eksik_nedenler = [ad for ad, p, n in (
+                ("Paketleme", p_paket, n_paket), ("Sevkiyat", p_sevkiyat, n_sevkiyat),
+                ("Ürün Kalitesi", p_kalite, n_kalite), ("Ürün Tanıtım Etiketi", p_etiket, n_etiket),
+            ) if p < DUSUK_PUAN_ESIGI and not n]
             if not gkk_urun or not gkk_firma:
                 st.warning("⚠️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
+            elif eksik_nedenler:
+                st.warning("⚠️ Düşük puan verdiğiniz alanların nedenini yazınız: " + ", ".join(eksik_nedenler))
             else:
                 gkk_kayit = {
                     "tarih": gkk_tarih.strftime("%d.%m.%Y"),
@@ -357,6 +387,10 @@ with sekme_giris:
                     "red_numune": gkk_red_numune,
                     "frekans": gkk_frekans,
                     "aciklama": gkk_aciklama,
+                    "puan_paket": p_paket, "neden_paket": n_paket,
+                    "puan_sevkiyat": p_sevkiyat, "neden_sevkiyat": n_sevkiyat,
+                    "puan_kalite": p_kalite, "neden_kalite": n_kalite,
+                    "puan_etiket": p_etiket, "neden_etiket": n_etiket,
                 }
                 if giris_kalite_kaydet(gkk_kayit):
                     st.session_state.form_key += 1
@@ -406,8 +440,10 @@ with sekme_yonetici:
             c_firma = next((cols_map[k] for k in cols_map if "firma" in k or "tedarikçi" in k or "company" in k or "şirket" in k), None)
             c_rapor = next((cols_map[k] for k in cols_map if "rapor" in k), None)
             c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
-            # Puan sütunu: adayların içinden en çok sayısal değer içereni seç
-            _puan_adaylari = [c for c in df_gkk.columns if any(x in c.lower() for x in ("puan", "100", "değerlendirme"))]
+            # Puan sütunu: alt puan sütunları hariç, en çok sayısal değer içereni seç
+            _alt_basliklar = {b for _, p, n in ALT_PUANLAR for b in (p, n)}
+            _puan_adaylari = [c for c in df_gkk.columns
+                              if c not in _alt_basliklar and any(x in c.lower() for x in ("puan", "100", "değerlendirme"))]
             c_puan = None
             if _puan_adaylari:
                 c_puan = max(_puan_adaylari, key=lambda c: pd.to_numeric(df_gkk[c], errors="coerce").notna().sum())
@@ -471,6 +507,20 @@ with sekme_yonetici:
                     sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
                     sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
+                    def _dusuk_nedenler(satir):
+                        parcalar = []
+                        for ad, c_p, c_n in ALT_PUANLAR:
+                            if c_p in h_df.columns:
+                                p = pd.to_numeric(satir.get(c_p), errors="coerce")
+                                n = str(satir.get(c_n, "")).strip() if c_n in h_df.columns else ""
+                                if n.lower() == "nan":
+                                    n = ""
+                                if pd.notna(p) and p < DUSUK_PUAN_ESIGI:
+                                    parcalar.append(f"{ad} {p:g}: {n if n else 'neden yazılmamış'}")
+                        return "  |  ".join(parcalar)
+
+                    sub_df["Düşük Puan Nedenleri"] = [_dusuk_nedenler(h_df.iloc[i]) for i in range(len(h_df))]
+
                     def _renk_satir(satir, _onay=(h_df[c_onay].astype(str) if c_onay else None)):
                         if _onay is None:
                             return [""] * len(satir)
@@ -487,6 +537,38 @@ with sekme_yonetici:
 
                     stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
                     st.dataframe(stilli, use_container_width=True, hide_index=True)
+
+                    # --- Puan detayı: 4 alt puan ve nedenleri ---
+                    if any(p in h_df.columns for _, p, _ in ALT_PUANLAR):
+                        ayirici()
+                        bolum_baslik("🔍 Puan Detayı ve Nedenler")
+                        st.caption(f"Kırmızı kutular {DUSUK_PUAN_ESIGI} puanın altındaki alt puanları ve girilen nedenleri gösterir.")
+                        for i in range(len(h_df)):
+                            satir = h_df.iloc[i]
+                            firma_adi = str(satir[c_firma]) if c_firma else "-"
+                            rapor_no = str(satir[c_rapor]) if c_rapor else "-"
+                            genel = puan_metni(h_df[c_puan].iloc[[i]])[0] if c_puan else "-"
+                            with st.container(border=True):
+                                st.markdown(f"**{firma_adi}** — Rapor: {rapor_no} — Genel Puan: **{genel}**")
+                                kolonlar = st.columns(4)
+                                for kol, (ad, c_p, c_n) in zip(kolonlar, ALT_PUANLAR):
+                                    with kol:
+                                        p = pd.to_numeric(satir.get(c_p), errors="coerce") if c_p in h_df.columns else float("nan")
+                                        n = str(satir.get(c_n, "")).strip() if c_n in h_df.columns else ""
+                                        if n.lower() == "nan":
+                                            n = ""
+                                        if pd.isna(p):
+                                            st.markdown(f"<div style='color:#94A3B8'>{ad}<br><b>-</b></div>", unsafe_allow_html=True)
+                                        elif p < DUSUK_PUAN_ESIGI:
+                                            st.markdown(
+                                                f"<div style='background:#FEE2E2;border-left:5px solid #DC2626;padding:0.5rem 0.7rem;border-radius:8px;color:#7F1D1D'>"
+                                                f"{ad}<br><b style='font-size:1.4rem'>{p:g}</b><br>{n if n else 'Neden yazılmamış'}</div>",
+                                                unsafe_allow_html=True)
+                                        else:
+                                            st.markdown(
+                                                f"<div style='background:#F0FDF4;border-left:5px solid #16A34A;padding:0.5rem 0.7rem;border-radius:8px;color:#14532D'>"
+                                                f"{ad}<br><b style='font-size:1.4rem'>{p:g}</b>{('<br>' + n) if n else ''}</div>",
+                                                unsafe_allow_html=True)
 
                     if not gecersiz_df.empty:
                         with st.expander("⚠️ Tarihi okunamayan kayıtlar", expanded=False):
