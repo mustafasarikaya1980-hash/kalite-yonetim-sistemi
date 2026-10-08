@@ -326,17 +326,24 @@ with sekme_saha:
         if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
             st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
         else:
-            belge_linkleri = dosyalari_yukle(yuklenen_dosyalar) if yuklenen_dosyalar else []
-            kayit = {
-                "personel": personel, "parca": parca, "ret_nedeni": ret_nedeni,
-                "op_adi": op_adi, "cnc_no": cnc_no, "aciklama": aciklama,
-                "ret_miktari": ret_miktari, "uretim_miktari": uretim_miktari,
-                "belge_linkleri": ", ".join(belge_linkleri) if belge_linkleri else "",
-            }
-            if veri_kaydet(kayit):
-                st.session_state.form_key += 1
-                st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
-                st.rerun()
+            # Dosya adı: parça_tarih_retnedeni_sıra
+            _on_ad = f"{temiz_ad(parca)}_{datetime.today().strftime('%d-%m-%Y')}_{temiz_ad(ret_nedeni)}"
+            belge_linkleri = dosyalari_yukle(yuklenen_dosyalar, on_ad=_on_ad) if yuklenen_dosyalar else []
+            if belge_linkleri is None:
+                st.error("❌ Belge / fotoğraf yüklenemedi. Kayıt yapılmadı, lütfen tekrar deneyin.")
+                if st.session_state.belge_hata:
+                    st.code(st.session_state.belge_hata)
+            else:
+                kayit = {
+                    "personel": personel, "parca": parca, "ret_nedeni": ret_nedeni,
+                    "op_adi": op_adi, "cnc_no": cnc_no, "aciklama": aciklama,
+                    "ret_miktari": ret_miktari, "uretim_miktari": uretim_miktari,
+                    "belge_linkleri": ", ".join(belge_linkleri) if belge_linkleri else "",
+                }
+                if veri_kaydet(kayit):
+                    st.session_state.form_key += 1
+                    st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
+                    st.rerun()
 
 # --- 2. SEKME ---
 with sekme_giris:
@@ -485,7 +492,74 @@ with sekme_yonetici:
         df = verileri_yukle()
         if not df.empty:
             st.metric("Toplam Saha Kaydı", f"{len(df)} Adet")
-            st.dataframe(df, use_container_width=True)
+
+            # Belge sütunlarındaki bağlantıları topla (virgülle ayrılmış olabilir)
+            belge_kolonlari = [c for c in df.columns if "belge" in str(c).lower()]
+
+            def _satir_linkleri(i):
+                bulunan = []
+                for c in belge_kolonlari:
+                    ham = str(df.iloc[i][c])
+                    if ham.strip().lower() in ("", "nan", "none"):
+                        continue
+                    bulunan += [l for l in re.split(r"[,\s]+", ham) if l.startswith("http")]
+                return list(dict.fromkeys(bulunan))
+
+            link_listesi = [_satir_linkleri(i) for i in range(len(df))]
+            en_cok = max([len(l) for l in link_listesi] + [1])
+
+            df_goster = df.drop(columns=belge_kolonlari)
+            bos_kolonlar = [c for c in df_goster.columns
+                            if (str(c).startswith("Unnamed") or re.match(r"^\d+\. sütun$", str(c))) and df_goster[c].isna().all()]
+            df_goster = df_goster.drop(columns=bos_kolonlar)
+            kolon_ayari = {}
+            for k in range(en_cok):
+                ad = f"Belge {k + 1}"
+                df_goster[ad] = [l[k] if len(l) > k else None for l in link_listesi]
+                kolon_ayari[ad] = st.column_config.LinkColumn(ad, display_text="📎 Aç")
+            st.dataframe(df_goster, use_container_width=True, hide_index=True, column_config=kolon_ayari)
+
+            # --- Belgeli kayıtlar: tıklanabilir küçük resimler ---
+            belgeli = [i for i, l in enumerate(link_listesi) if l]
+            if not belgeli:
+                st.caption("Henüz belge / fotoğraf eklenmiş saha kaydı yok.")
+            else:
+                ayirici()
+                bolum_baslik("🖼️ Belgeler ve Fotoğraflar")
+                st.caption("Küçük resme veya bağlantıya tıklayınca belge yeni sekmede açılır. En yeni 20 belgeli kayıt gösterilir.")
+
+                def _kol_bul(*anahtarlar):
+                    for c in df.columns:
+                        if any(a in str(c).lower() for a in anahtarlar):
+                            return c
+                    return None
+
+                c_zaman, c_pers, c_parca, c_ret, c_adet = (_kol_bul("zaman"), _kol_bul("personel"), _kol_bul("parça", "parca"),
+                                                           _kol_bul("ret nedeni"), _kol_bul("ret aded"))
+
+                def _g(satir, kol):
+                    if not kol:
+                        return "-"
+                    v = str(satir[kol]).strip()
+                    return "-" if v.lower() in ("", "nan", "none") else v
+
+                for i in reversed(belgeli[-20:]):
+                    satir = df.iloc[i]
+                    linkler = link_listesi[i]
+                    with st.container(border=True):
+                        st.markdown(f"**{_g(satir, c_zaman)}** — {_g(satir, c_pers)} — {_g(satir, c_parca)} — {_g(satir, c_ret)} (Ret: {_g(satir, c_adet)})")
+                        for baslangic in range(0, len(linkler), 4):
+                            kolonlar = st.columns(4)
+                            for kol, (k, link) in zip(kolonlar, enumerate(linkler[baslangic:baslangic + 4], start=baslangic + 1)):
+                                m = re.search(r"/d/([\w-]+)", link) or re.search(r"[?&]id=([\w-]+)", link)
+                                with kol:
+                                    if m:
+                                        kucuk = f"https://drive.google.com/thumbnail?id={m.group(1)}&sz=w400"
+                                        st.markdown(
+                                            f"<a href='{link}' target='_blank'><img src='{kucuk}' alt='Belge {k}' "
+                                            f"style='width:100%;border-radius:8px;border:1px solid #CBD5E1'></a>",
+                                            unsafe_allow_html=True)
+                                    st.markdown(f"<a href='{link}' target='_blank' style='font-weight:700;color:#1D4ED8'>📎 Belge {k}</a>", unsafe_allow_html=True)
         else:
             st.info("Saha verisi bulunmuyor.")
 
