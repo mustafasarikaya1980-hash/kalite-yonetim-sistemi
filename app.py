@@ -70,23 +70,17 @@ st.markdown(
     div[data-baseweb="tab-highlight"] { background-color: #F59E0B !important; height: 5px !important; }
     div[data-baseweb="tab-border"] { background-color: #1E3A8A !important; height: 3px !important; }
 
-    /* ALT MENÜ SEKMELERİ: biraz daha küçük, turuncu vurgulu */
-    div[data-baseweb="tab-panel"] button[data-baseweb="tab"] {
-        padding: 0.65rem 1.3rem;
-        background: #FEF3C7;
-        border: 2px solid #FDE68A;
-        border-bottom: none;
+    /* TÜM MENÜ VE BÖLÜM BAŞLIKLARI: aynı büyük, kalın, renkli tema (alt menüler dahil) */
+    div[data-baseweb="tab-panel"] button[data-baseweb="tab"] { margin-top: 0.3rem; }
+    h2, h3, div[data-testid="stHeading"] h2, div[data-testid="stHeading"] h3 {
+        color: #1E3A8A !important;
+        font-weight: 900 !important;
+        border-left: 8px solid #F59E0B;
+        padding-left: 0.8rem;
     }
-    div[data-baseweb="tab-panel"] button[data-baseweb="tab"] p { font-size: 1.25rem !important; color: #92400E !important; }
-    div[data-baseweb="tab-panel"] button[data-baseweb="tab"]:hover { background: #FDE68A; }
-    div[data-baseweb="tab-panel"] button[data-baseweb="tab"][aria-selected="true"] {
-        background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
-        border-color: #B45309;
-        box-shadow: 0 -3px 10px rgba(217,119,6,0.35);
-    }
-    div[data-baseweb="tab-panel"] button[data-baseweb="tab"][aria-selected="true"] p { color: #FFFFFF !important; }
-    div[data-baseweb="tab-panel"] div[data-baseweb="tab-highlight"] { background-color: #1E3A8A !important; height: 4px !important; }
-    div[data-baseweb="tab-panel"] div[data-baseweb="tab-border"] { background-color: #D97706 !important; height: 2px !important; }
+    h2, div[data-testid="stHeading"] h2 { font-size: 2.3rem !important; }
+    h3, div[data-testid="stHeading"] h3 { font-size: 1.9rem !important; }
+    h4 { font-size: 1.5rem !important; font-weight: 800 !important; color: #1D4ED8 !important; }
 
     /* Sayfa başlıkları */
     h1 { font-size: 2.4rem !important; font-weight: 800 !important; }
