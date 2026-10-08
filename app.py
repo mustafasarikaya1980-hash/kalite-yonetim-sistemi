@@ -378,197 +378,125 @@ with sekme_yonetici:
             if _puan_adaylari:
                 c_puan = max(_puan_adaylari, key=lambda c: pd.to_numeric(df_gkk[c], errors="coerce").notna().sum())
 
-            # --- Hafta seçimi: istatistikler ve grafik seçilen haftaya göre hesaplanır ---
+            # --- Haftaları hazırla (Pazartesi başlangıçlı) ---
             df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
             df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
             df_gkk["_hafta_bas"] = (df_gkk["_dt"].dt.normalize() - pd.to_timedelta(df_gkk["_dt"].dt.weekday, unit="D"))
+            gecersiz_df = df_gkk[df_gkk["_hafta_bas"].isna()]
 
-            TUM_HAFTALAR = "📅 Tüm Haftalar"
-            hafta_secenekleri = {TUM_HAFTALAR: None}
+            hafta_secenekleri = {}
             for _hb in sorted(df_gkk["_hafta_bas"].dropna().unique(), reverse=True):
                 _bas = pd.Timestamp(_hb)
                 _son = _bas + pd.Timedelta(days=6)
                 _no = int(df_gkk.loc[df_gkk["_hafta_bas"] == _hb, "_hafta"].iloc[0])
                 hafta_secenekleri[f"{_no}. Hafta ({_bas.strftime('%d.%m.%Y')} Pazartesi / {_son.strftime('%d.%m.%Y')} Pazar)"] = _hb
 
-            secilen_hafta = st.selectbox(
-                "🔎 Hafta seçin (özet istatistikler ve puan grafiği seçilen haftaya göre güncellenir)",
-                list(hafta_secenekleri.keys()),
-                key="secilen_hafta",
-            )
-            _secilen_anahtar = hafta_secenekleri[secilen_hafta]
-            df_sec = df_gkk if _secilen_anahtar is None else df_gkk[df_gkk["_hafta_bas"] == _secilen_anahtar]
+            if not hafta_secenekleri:
+                st.warning("Tarihi okunabilen kayıt bulunmuyor.")
+                if not gecersiz_df.empty:
+                    st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas"], errors="ignore"), use_container_width=True, hide_index=True)
+            else:
+                secilen_hafta = st.selectbox("🔎 Hafta seç", list(hafta_secenekleri.keys()), key="hafta_sec")
+                h_df = df_gkk[df_gkk["_hafta_bas"] == hafta_secenekleri[secilen_hafta]]
 
-            toplam_parti = len(df_sec)
-            ortalama_puan = 0.0
-            min_puan, max_puan = None, None
-            min_firma, max_firma = "-", "-"
+                col_sol, col_sag = st.columns([1.3, 0.7])
 
-            if c_puan:
-                puan_serisi = pd.to_numeric(df_sec[c_puan], errors="coerce")
-                if puan_serisi.notna().any():
-                    ortalama_puan = round(puan_serisi.mean(), 2)
-                    min_idx = puan_serisi.idxmin()
-                    max_idx = puan_serisi.idxmax()
-                    min_puan = puan_serisi.loc[min_idx]
-                    max_puan = puan_serisi.loc[max_idx]
-                    if c_firma:
-                        min_firma = str(df_sec.loc[min_idx, c_firma])
-                        max_firma = str(df_sec.loc[max_idx, c_firma])
+                # ---------- SOL: seçilen haftanın raporu ----------
+                with col_sol:
+                    st.subheader("📅 Haftalık Rapor")
+                    st.caption(f"{secilen_hafta} — {len(h_df)} giriş kalite. Satır renkleri: KABUL yeşil, ŞARTLI KABUL sarı, RED kırmızı. Puana göre sıralıdır (en yüksek en üstte, en düşük en altta).")
 
-            with st.expander(f"📊 Yönetim Özet Tablosu İstatistikleri (Toplam / Ortalama / En Düşük / En Yüksek) — {secilen_hafta}", expanded=True):
-                col_st1, col_st2, col_st3, col_st4 = st.columns(4)
-                col_st1.metric("TOPLAM ADET", f"{toplam_parti}")
-                col_st2.metric("ORTALAMA", f"{ortalama_puan}")
-                col_st3.metric("EN KÜÇÜK PUAN & FİRMA", f"{min_puan}", f"{min_firma}")
-                col_st4.metric("EN BÜYÜK PUAN & FİRMA", f"{max_puan}", f"{max_firma}")
+                    # Puana göre sırala: en yüksek (1.) en üstte, en düşük (sonuncu) en altta
+                    if c_puan:
+                        h_df = h_df.assign(_p=pd.to_numeric(h_df[c_puan], errors="coerce"))
+                        h_df = h_df.sort_values("_p", ascending=False, na_position="last", kind="stable")
+                    else:
+                        h_df = h_df.assign(_p=float("nan"))
+                    h_df = h_df.reset_index(drop=True)
 
-            st.markdown("---")
+                    p_max, p_min = h_df["_p"].max(), h_df["_p"].min()
+                    sira_no = h_df["_p"].rank(method="min", ascending=False)
 
-            col_tablo, col_grafik = st.columns([1.3, 0.7])
+                    def _sira_metni(i):
+                        p = h_df["_p"].iloc[i]
+                        if pd.isna(p):
+                            return "-"
+                        if p == p_max:
+                            return "1."
+                        if p == p_min and p_max != p_min:
+                            return "Sonuncu"
+                        return f"{int(sira_no.iloc[i])}."
 
-            with col_tablo:
-                st.subheader("📅 Haftalık Bazda Resmi Yönetim Tablosu")
-                st.caption("Satır renkleri: KABUL yeşil, ŞARTLI KABUL sarı, RED kırmızı. Her hafta puana göre sıralıdır (en yüksek en üstte, en düşük en altta).")
+                    sub_df = pd.DataFrame()
+                    sub_df["Sıra"] = [_sira_metni(i) for i in range(len(h_df))]
+                    sub_df["Tarih / Date"] = h_df[c_tarih]
+                    sub_df["Gelen Ürün Tipi ve Ölçüsü"] = h_df[c_urun] if c_urun else "-"
+                    sub_df["Gelen Ürün Şirket"] = h_df[c_firma] if c_firma else "-"
+                    sub_df["RAPOR NO"] = h_df[c_rapor] if c_rapor else "-"
+                    sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
+                    sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
-                if c_tarih:
-                    df_gkk["_dt"] = pd.to_datetime(df_gkk[c_tarih], errors="coerce", dayfirst=True)
-                    df_gkk["_hafta"] = df_gkk["_dt"].dt.isocalendar().week.fillna(1).astype(int)
-                    # Haftanın başlangıcı (Pazartesi) - yıl farkını da ayırmak için gruplama anahtarı
-                    df_gkk["_hafta_bas"] = (df_gkk["_dt"].dt.normalize() - pd.to_timedelta(df_gkk["_dt"].dt.weekday, unit="D"))
+                    def _renk_satir(satir, _onay=(h_df[c_onay].astype(str) if c_onay else None)):
+                        if _onay is None:
+                            return [""] * len(satir)
+                        durum = _onay.iloc[satir.name].strip().upper()
+                        if "ŞARTLI" in durum or "SARTLI" in durum:
+                            renk = "background-color: #FEF9C3; color: #713F12; font-weight: 600"
+                        elif durum in ("RED", "RET") or durum.startswith("RED") or durum.startswith("RET"):
+                            renk = "background-color: #FEE2E2; color: #7F1D1D; font-weight: 600"
+                        elif "KABUL" in durum:
+                            renk = "background-color: #DCFCE7; color: #14532D; font-weight: 600"
+                        else:
+                            renk = ""
+                        return [renk] * len(satir)
 
-                    hafta_anahtarlari = sorted(df_gkk["_hafta_bas"].dropna().unique(), reverse=True)
-                    gecersiz_df = df_gkk[df_gkk["_hafta_bas"].isna()]
-
-                    for hb in hafta_anahtarlari:
-                        h_df = df_gkk[df_gkk["_hafta_bas"] == hb]
-                        if h_df.empty:
-                            continue
-
-                        hafta_bas = pd.Timestamp(hb)
-                        hafta_son = hafta_bas + pd.Timedelta(days=6)   # Pazar
-                        h = int(h_df["_hafta"].iloc[0])
-                        baslik = f"📌 {h}. Hafta ({hafta_bas.strftime('%d.%m.%Y')} Pazartesi / {hafta_son.strftime('%d.%m.%Y')} Pazar) — {len(h_df)} giriş kalite"
-
-                        with st.expander(baslik, expanded=True):
-                            # Puana göre sırala: en yüksek (1.) en üstte, en düşük (sonuncu) en altta
-                            if c_puan:
-                                h_df = h_df.assign(_p=pd.to_numeric(h_df[c_puan], errors="coerce"))
-                                h_df = h_df.sort_values("_p", ascending=False, na_position="last", kind="stable")
-                            else:
-                                h_df = h_df.assign(_p=float("nan"))
-                            h_df = h_df.reset_index(drop=True)
-
-                            p_max, p_min = h_df["_p"].max(), h_df["_p"].min()
-                            sira_no = h_df["_p"].rank(method="min", ascending=False)
-
-                            def _sira_metni(i):
-                                p = h_df["_p"].iloc[i]
-                                if pd.isna(p):
-                                    return "-"
-                                if p == p_max:
-                                    return "1."
-                                if p == p_min and p_max != p_min:
-                                    return "Sonuncu"
-                                return f"{int(sira_no.iloc[i])}."
-
-                            sub_df = pd.DataFrame()
-                            sub_df["Sıra"] = [_sira_metni(i) for i in range(len(h_df))]
-                            sub_df["Tarih / Date"] = h_df[c_tarih]
-                            sub_df["Gelen Ürün Tipi ve Ölçüsü"] = h_df[c_urun] if c_urun else "-"
-                            sub_df["Gelen Ürün Şirket"] = h_df[c_firma] if c_firma else "-"
-                            sub_df["RAPOR NO"] = h_df[c_rapor] if c_rapor else "-"
-                            sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
-                            sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
-
-                            def _renk_satir(satir, _onay=(h_df[c_onay].astype(str) if c_onay else None)):
-                                if _onay is None:
-                                    return [""] * len(satir)
-                                durum = _onay.iloc[satir.name].strip().upper()
-                                if "ŞARTLI" in durum or "SARTLI" in durum:
-                                    renk = "background-color: #FEF9C3; color: #713F12; font-weight: 600"
-                                elif durum in ("RED", "RET") or durum.startswith("RED") or durum.startswith("RET"):
-                                    renk = "background-color: #FEE2E2; color: #7F1D1D; font-weight: 600"
-                                elif "KABUL" in durum:
-                                    renk = "background-color: #DCFCE7; color: #14532D; font-weight: 600"
-                                else:
-                                    renk = ""
-                                return [renk] * len(satir)
-
-                            stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
-                            st.dataframe(stilli, use_container_width=True, hide_index=True)
+                    stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
+                    st.dataframe(stilli, use_container_width=True, hide_index=True)
 
                     if not gecersiz_df.empty:
                         with st.expander("⚠️ Tarihi okunamayan kayıtlar", expanded=False):
                             st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas"], errors="ignore"), use_container_width=True, hide_index=True)
-                else:
-                    yonetim_df = pd.DataFrame()
-                    yonetim_df["Tarih / Date"] = "-"
-                    yonetim_df["Gelen Ürün Tipi ve Ölçüsü"] = df_gkk[c_urun] if c_urun else "-"
-                    yonetim_df["Gelen Ürün Şirket"] = df_gkk[c_firma] if c_firma else "-"
-                    yonetim_df["RAPOR NO"] = df_gkk[c_rapor] if c_rapor else "-"
-                    yonetim_df["Onay Durumu"] = df_gkk[c_onay] if c_onay else "-"
-                    yonetim_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(df_gkk[c_puan]) if c_puan else "-"
-                    st.dataframe(yonetim_df, use_container_width=True, hide_index=True)
 
-            with col_grafik:
-                st.subheader("📊 Tedarikçi Puan Fikstürü")
-                st.caption(f"Gösterilen: {secilen_hafta}")
-                if c_puan and c_firma:
-                    grafik_df = df_sec[[c_firma, c_puan]].copy()
-                    grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
-                    grafik_df = grafik_df.dropna()
-
-                    if not grafik_df.empty:
-                        puan_chart = alt.Chart(grafik_df).mark_bar(color="#2563EB", cornerRadiusEnd=6).encode(
-                            x=alt.X(f"{c_puan}:Q", title="Değerlendirme Puanı (100 üzerinden)"),
-                            y=alt.Y(f"{c_firma}:N", sort="-x", title="Tedarikçi Firma"),
-                            tooltip=[c_firma, c_puan]
-                        ).properties(height=400)
-                        st.altair_chart(puan_chart, use_container_width=True)
+                # ---------- SAĞ: üstte tedarikçi fikstürü, altta aylık grafik ----------
+                with col_sag:
+                    st.subheader("📊 Tedarikçi Puan Fikstürü")
+                    st.caption(secilen_hafta)
+                    if c_puan and c_firma:
+                        grafik_df = h_df[[c_firma, c_puan]].copy()
+                        grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
+                        grafik_df = grafik_df.dropna()
+                        if not grafik_df.empty:
+                            grafik_df = grafik_df.groupby(c_firma, as_index=False)[c_puan].mean()
+                            grafik_df[c_puan] = grafik_df[c_puan].round(2)
+                            puan_chart = alt.Chart(grafik_df).mark_bar(color="#2563EB", cornerRadiusEnd=6).encode(
+                                x=alt.X(f"{c_puan}:Q", title="Değerlendirme Puanı (100 üzerinden)", scale=alt.Scale(domain=[0, 100])),
+                                y=alt.Y(f"{c_firma}:N", sort="-x", title="Tedarikçi Firma"),
+                                tooltip=[c_firma, c_puan]
+                            ).properties(height=max(120, 45 * len(grafik_df) + 50))
+                            st.altair_chart(puan_chart, use_container_width=True)
+                        else:
+                            st.info("Bu hafta için sayısal puan bulunmuyor.")
                     else:
-                        st.info("Grafik için yeterli sayısal puan bulunmuyor.")
-                else:
-                    st.info("Puan veya firma sütunu eksik.")
+                        st.info("Puan veya firma sütunu eksik.")
 
-            # --- Tedarikçi bazında aylık puan trendi ---
-            st.markdown("---")
-            st.subheader("📈 Tedarikçi Bazında Aylık Puan Trendi")
-            if c_puan and c_firma and "_dt" in df_gkk.columns:
-                trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
-                trend_df[c_puan] = pd.to_numeric(trend_df[c_puan], errors="coerce")
-                trend_df = trend_df.dropna()
-                if not trend_df.empty:
-                    trend_df["Ay"] = trend_df["_dt"].dt.to_period("M").dt.to_timestamp()
-                    aylik = trend_df.groupby(["Ay", c_firma], as_index=False)[c_puan].mean()
-                    aylik[c_puan] = aylik[c_puan].round(2)
-                    trend_chart = alt.Chart(aylik).mark_line(point=True).encode(
-                        x=alt.X("Ay:T", title="Ay", axis=alt.Axis(format="%m.%Y")),
-                        y=alt.Y(f"{c_puan}:Q", title="Ortalama Puan", scale=alt.Scale(domain=[0, 100])),
-                        color=alt.Color(f"{c_firma}:N", title="Tedarikçi"),
-                        tooltip=[alt.Tooltip("Ay:T", format="%m.%Y"), c_firma, c_puan],
-                    ).properties(height=350)
-                    st.altair_chart(trend_chart, use_container_width=True)
-                else:
-                    st.info("Trend için tarihli ve puanlı kayıt bulunmuyor.")
-            else:
-                st.info("Trend için tarih, puan ve firma sütunları gerekli.")
-        else:
-            st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
-
-# --- 4. SEKME: YÖNETİM & AYARLAR ---
-with sekme_ayarlar:
-    st.header("Personel ve Parça Listesini Yönet")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        yeni_p = st.text_input("Personel Adı Soyadı", key="yeni_p_input")
-        if st.button("Personel Ekle", key="btn_p_ekle") and yeni_p.strip():
-            if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
-                st.success("✅ Personel eklendi!")
-                st.rerun()
-    with col_p2:
-        yeni_parca = st.text_input("Parça Adı", key="yeni_parca_input")
-        if st.button("Parça Ekle", key="btn_parca_ekle") and yeni_parca.strip():
-            if kalici_liste_ekle("PARCA", yeni_parca.strip()):
-                st.success("✅ Parça eklendi!")
-                st.rerun()
+                    st.subheader("📈 Aylık Puan Grafiği")
+                    st.caption("Tedarikçi bazında aylık ortalama puan (tüm kayıtlar)")
+                    if c_puan and c_firma:
+                        trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
+                        trend_df[c_puan] = pd.to_numeric(trend_df[c_puan], errors="coerce")
+                        trend_df = trend_df.dropna()
+                        if not trend_df.empty:
+                            trend_df["Ay"] = trend_df["_dt"].dt.to_period("M").dt.to_timestamp()
+                            aylik = trend_df.groupby(["Ay", c_firma], as_index=False)[c_puan].mean()
+                            aylik[c_puan] = aylik[c_puan].round(2)
+                            trend_chart = alt.Chart(aylik).mark_line(point=True).encode(
+                                x=alt.X("Ay:T", title="Ay", axis=alt.Axis(format="%m.%Y")),
+                                y=alt.Y(f"{c_puan}:Q", title="Ortalama Puan", scale=alt.Scale(domain=[0, 100])),
+                                color=alt.Color(f"{c_firma}:N", title="Tedarikçi"),
+                                tooltip=[alt.Tooltip("Ay:T", format="%m.%Y"), c_firma, c_puan],
+                            ).properties(height=300)
+                            st.altair_chart(trend_chart, use_container_width=True)
+                        else:
+                            st.info("Aylık grafik için tarihli ve puanlı kayıt bulunmuyor.")
+                    else:
+                        st.info("Aylık grafik için puan ve firma sütunları gerekli.")
