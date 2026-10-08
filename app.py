@@ -22,6 +22,42 @@ st.components.v1.html(
             doc.setAttribute('class', 'notranslate');
             doc.setAttribute('translate', 'no');
         } catch (e) {}
+
+        // Sekme (menü) başlıklarını doğrudan boya: CSS seçicileri Streamlit sürümüne göre tutmayabiliyor
+        function sekmeleriBoya() {
+            try {
+                const d = window.parent.document;
+                d.querySelectorAll('[role="tab"]').forEach(function (b) {
+                    const sec = b.getAttribute('aria-selected') === 'true';
+                    const yaz = sec ? '#FFFFFF' : '#1E3A8A';
+                    const st = function (el, k, v) { el.style.setProperty(k, v, 'important'); };
+                    st(b, 'background', sec ? 'linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%)' : '#E0E7FF');
+                    st(b, 'border', '2px solid ' + (sec ? '#1E3A8A' : '#C7D2FE'));
+                    st(b, 'border-bottom', 'none');
+                    st(b, 'border-radius', '12px 12px 0 0');
+                    st(b, 'padding', '0.8rem 1.5rem');
+                    st(b, 'height', 'auto');
+                    st(b, 'margin-right', '0.4rem');
+                    if (sec) st(b, 'box-shadow', '0 -3px 10px rgba(37,99,235,0.35)'); else b.style.removeProperty('box-shadow');
+                    [b].concat(Array.from(b.querySelectorAll('*'))).forEach(function (el) {
+                        st(el, 'font-size', '1.5rem');
+                        st(el, 'font-weight', '900');
+                        st(el, 'color', yaz);
+                        st(el, 'line-height', '1.3');
+                    });
+                });
+                d.querySelectorAll('[data-baseweb="tab-highlight"]').forEach(function (h) {
+                    h.style.setProperty('background-color', '#F59E0B', 'important');
+                    h.style.setProperty('height', '5px', 'important');
+                });
+                d.querySelectorAll('[data-baseweb="tab-border"]').forEach(function (h) {
+                    h.style.setProperty('background-color', '#1E3A8A', 'important');
+                    h.style.setProperty('height', '3px', 'important');
+                });
+            } catch (e) {}
+        }
+        sekmeleriBoya();
+        setInterval(sekmeleriBoya, 300);
     </script>
     """,
     height=0,
