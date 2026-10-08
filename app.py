@@ -631,11 +631,12 @@ with sekme_yonetici:
                             grafik_df = grafik_df.dropna()
                             if not grafik_df.empty:
                                 grafik_df = grafik_df.groupby("Firma", as_index=False)["Puan"].mean()
-                                grafik_df["Puan"] = grafik_df["Puan"].round(1)
+                                grafik_df["Puan"] = grafik_df["Puan"].round(2)
+                                grafik_df["PuanMetni"] = grafik_df["Puan"].apply(lambda v: f"{v:g}".replace(".", ","))
                                 grafik_df["Aralık"] = grafik_df["Puan"].apply(_aralik)
                                 # En yüksek puan en üstte olacak şekilde firma sırası
                                 firma_sirasi = grafik_df.sort_values("Puan", ascending=False)["Firma"].tolist()
-                                hafta_ort = round(float(grafik_df["Puan"].mean()), 1)
+                                hafta_ort = round(float(grafik_df["Puan"].mean()), 2)
 
                                 bar = alt.Chart(grafik_df).mark_bar(cornerRadiusEnd=8).encode(
                                     x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105]),
@@ -645,22 +646,22 @@ with sekme_yonetici:
                                     color=alt.Color("Aralık:N",
                                                     scale=alt.Scale(domain=PUAN_ARALIKLARI, range=PUAN_RENKLERI),
                                                     legend=alt.Legend(title="Puan Aralığı", columns=2)),
-                                    tooltip=[alt.Tooltip("Firma:N"), alt.Tooltip("Puan:Q", format=".1f"), alt.Tooltip("Aralık:N")],
+                                    tooltip=[alt.Tooltip("Firma:N"), alt.Tooltip("PuanMetni:N", title="Puan"), alt.Tooltip("Aralık:N")],
                                 )
                                 etiket = alt.Chart(grafik_df).mark_text(align="left", dx=6, fontSize=15, fontWeight="bold", color="#0F172A").encode(
                                     x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])),
                                     y=alt.Y("Firma:N", sort=firma_sirasi, title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2)),
-                                    text=alt.Text("Puan:Q", format=".0f"),
+                                    text=alt.Text("PuanMetni:N"),
                                 )
                                 ort_cizgi = alt.Chart(pd.DataFrame({"Ortalama": [hafta_ort]})).mark_rule(
                                     strokeDash=[6, 4], strokeWidth=2, color="#475569"
-                                ).encode(x=alt.X("Ortalama:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])), tooltip=[alt.Tooltip("Ortalama:Q", title="Hafta ortalaması", format=".1f")])
+                                ).encode(x=alt.X("Ortalama:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])), tooltip=[alt.Tooltip("Ortalama:Q", title="Hafta ortalaması", format=".2~f")])
 
                                 fiksturu = _tema(alt.layer(bar, etiket, ort_cizgi).properties(
                                     height=max(160, 70 * len(grafik_df) + 60)
                                 ))
                                 st.altair_chart(fiksturu, use_container_width=True, theme=None)
-                                st.caption(f"Kesikli çizgi: haftanın ortalama puanı ({hafta_ort:g})")
+                                st.caption(f"Kesikli çizgi: haftanın ortalama puanı ({f'{hafta_ort:g}'.replace('.', ',')})")
                             else:
                                 st.info("Bu hafta için sayısal puan bulunmuyor.")
                         else:
@@ -670,7 +671,7 @@ with sekme_yonetici:
 
                     with st.container(border=True):
                         bolum_baslik("📈 Aylık Puan Grafiği")
-                        st.caption("Tedarikçi bazında aylık ortalama puan (tüm kayıtlar)")
+                        st.caption("Her ay için tedarikçilerin ortalama puanı. Renkler: yeşil 85-100, mavi 70-84, turuncu 50-69, kırmızı 0-49.")
                         if c_puan and c_firma:
                             trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
                             trend_df.columns = ["Tarih", "Firma", "Puan"]
@@ -679,22 +680,39 @@ with sekme_yonetici:
                             if not trend_df.empty:
                                 trend_df["Ay"] = trend_df["Tarih"].dt.to_period("M").dt.to_timestamp()
                                 aylik = trend_df.groupby(["Ay", "Firma"], as_index=False)["Puan"].mean()
-                                aylik["Puan"] = aylik["Puan"].round(1)
+                                aylik["Puan"] = aylik["Puan"].round(2)
+                                aylik["PuanMetni"] = aylik["Puan"].apply(lambda v: f"{v:g}".replace(".", ","))
+                                aylik["Aralık"] = aylik["Puan"].apply(_aralik)
+                                aylar = sorted(aylik["Ay"].unique(), reverse=True)
 
-                                temel = alt.Chart(aylik).encode(
-                                    x=alt.X("Ay:T", title=None, axis=alt.Axis(format="%m.%Y", labelAngle=0, tickCount="month")),
-                                    y=alt.Y("Puan:Q", title="Ortalama Puan", scale=alt.Scale(domain=[0, 100])),
-                                    color=alt.Color("Firma:N", scale=alt.Scale(scheme="tableau10"),
-                                                    legend=alt.Legend(title=None, columns=2)),
-                                )
-                                cizgi = temel.mark_line(strokeWidth=3, interpolate="monotone")
-                                noktalar = temel.mark_point(filled=True, size=120, opacity=1).encode(
-                                    tooltip=[alt.Tooltip("Firma:N"), alt.Tooltip("Ay:T", title="Ay", format="%m.%Y"), alt.Tooltip("Puan:Q", format=".1f")]
-                                )
-                                degerler = temel.mark_text(dy=-14, fontSize=13, fontWeight="bold").encode(text=alt.Text("Puan:Q", format=".0f"))
+                                for _sira, _ay in enumerate(aylar[:6]):
+                                    if _sira > 0:
+                                        st.markdown('<hr style="border: none; border-top: 2px dashed #CBD5E1; margin: 1rem 0 0.8rem 0;">', unsafe_allow_html=True)
+                                    ay_df = aylik[aylik["Ay"] == _ay].sort_values("Puan", ascending=False)
+                                    ay_sirasi = ay_df["Firma"].tolist()
+                                    ay_adi = pd.Timestamp(_ay).strftime("%m.%Y")
+                                    ay_ort = f"{round(float(ay_df['Puan'].mean()), 2):g}".replace(".", ",")
+                                    st.markdown(f"<div style='font-size:1.25rem;font-weight:800;color:#1E293B'>🗓️ {ay_adi} <span style='font-weight:500;font-size:1rem;color:#475569'>— {len(ay_df)} firma, ortalama {ay_ort}</span></div>", unsafe_allow_html=True)
 
-                                aylik_grafik = _tema(alt.layer(cizgi, noktalar, degerler).properties(height=320))
-                                st.altair_chart(aylik_grafik, use_container_width=True, theme=None)
+                                    ay_bar = alt.Chart(ay_df).mark_bar(cornerRadiusEnd=6).encode(
+                                        x=alt.X("Puan:Q", title=None, scale=alt.Scale(domain=[0, 110]),
+                                                axis=alt.Axis(values=[0, 20, 40, 60, 80, 100])),
+                                        y=alt.Y("Firma:N", sort=ay_sirasi, title=None, scale=alt.Scale(paddingInner=0.4, paddingOuter=0.15),
+                                                axis=alt.Axis(labelLimit=200, labelFontSize=13, labelFontWeight="bold", labelPadding=10)),
+                                        color=alt.Color("Aralık:N", scale=alt.Scale(domain=PUAN_ARALIKLARI, range=PUAN_RENKLERI), legend=None),
+                                        tooltip=[alt.Tooltip("Firma:N"), alt.Tooltip("PuanMetni:N", title="Ortalama Puan"), alt.Tooltip("Aralık:N")],
+                                    )
+                                    ay_yazi = alt.Chart(ay_df).mark_text(align="left", dx=5, fontSize=14, fontWeight="bold", color="#0F172A").encode(
+                                        x=alt.X("Puan:Q", scale=alt.Scale(domain=[0, 110])),
+                                        y=alt.Y("Firma:N", sort=ay_sirasi, scale=alt.Scale(paddingInner=0.4, paddingOuter=0.15)),
+                                        text=alt.Text("PuanMetni:N"),
+                                    )
+                                    st.altair_chart(
+                                        _tema(alt.layer(ay_bar, ay_yazi).properties(height=max(110, 46 * len(ay_df) + 40))),
+                                        use_container_width=True, theme=None,
+                                    )
+                                if len(aylar) > 6:
+                                    st.caption(f"Son 6 ay gösteriliyor ({len(aylar)} aylık kayıt var).")
                             else:
                                 st.info("Aylık grafik için tarihli ve puanlı kayıt bulunmuyor.")
                         else:
