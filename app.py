@@ -95,7 +95,7 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?forma
 CSV2_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={SHEET2_GID}"
 CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={GKK_SHEET_GID}"
 
-# Güncel Apps Script Web App URL'i
+# Güncel Apps Script Web App URL'i (6 numaralı sürüm dağıtımı)
 # ÖNEMLİ: Apps Script'te "Web uygulaması > URL > Kopyala" ile aldığınız adresle birebir aynı olmalı.
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9xKz14pVGDNPDkUlUsztvrOK6WEAUOmbXDWBNcpwL70lcg8QRR1AVwKNEXAEoi40P/exec"
 
@@ -265,7 +265,7 @@ sekme_giris, sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
 
 ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
-# --- 1. SEKME: SAHA VERİ GİRİŞİ ---
+# --- 1. SEKME ---
 with sekme_saha:
     st.header("Saha Kalite Kontrol Formu")
     if st.session_state.mesaj:
@@ -306,7 +306,7 @@ with sekme_saha:
                 st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
                 st.rerun()
 
-# --- 2. SEKME: GİRİŞ KALİTE KONTROL ---
+# --- 2. SEKME ---
 with sekme_giris:
     st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
     st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri doğrudan Form Yanıtları 7 sekmesine işlenir.")
@@ -451,7 +451,7 @@ with sekme_yonetici:
             c_onay = next((cols_map[k] for k in cols_map if "onay" in k), None)
             c_not = next((cols_map[k] for k in cols_map if k == "notlar"), None)
             c_frekans = next((cols_map[k] for k in cols_map if "frekans" in k), None)
-            # Puan sütunu: alt puan sütunları hariç, en çok sayısal değer içereni seç
+            # Puan sütunu: adayların içinden en çok sayısal değer içereni seç
             _alt_basliklar = {b for _, p, n in ALT_PUANLAR for b in (p, n)}
             _puan_adaylari = [c for c in df_gkk.columns
                               if c not in _alt_basliklar and any(x in c.lower() for x in ("puan", "100", "değerlendirme"))]
@@ -518,6 +518,7 @@ with sekme_yonetici:
                     sub_df["Onay Durumu"] = h_df[c_onay] if c_onay else "-"
                     sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
+
                     def _renk_satir(satir, _onay=(h_df[c_onay].astype(str) if c_onay else None)):
                         if _onay is None:
                             return [""] * len(satir)
@@ -545,7 +546,7 @@ with sekme_yonetici:
                         o3.metric("En Düşük Puan", f"{_puanlar.min():g}" if not _puanlar.empty else "-")
                         o4.metric("En Yüksek Puan", f"{_puanlar.max():g}" if not _puanlar.empty else "-")
 
-                    # --- Puan detayı: 4 alt puan, nedenleri ve ek açıklama ---
+                    # --- Puan detayı: 4 alt puan ve nedenleri ---
                     ayirici()
                     bolum_baslik("🔍 Puan Detayı ve Nedenler")
                     if not any(p in h_df.columns for _, p, _ in ALT_PUANLAR):
@@ -671,7 +672,7 @@ with sekme_yonetici:
 
                     with st.container(border=True):
                         bolum_baslik("📈 Aylık Puan Grafiği")
-                        st.caption("Her ay için tedarikçilerin ortalama puanı. Renkler: yeşil 85-100, mavi 70-84, turuncu 50-69, kırmızı 0-49.")
+                        st.caption("Seçilen haftanın ayındaki tedarikçi ortalama puanları (hafta değişince ay da değişir). Renkler: yeşil 85-100, mavi 70-84, turuncu 50-69, kırmızı 0-49.")
                         if c_puan and c_firma:
                             trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
                             trend_df.columns = ["Tarih", "Firma", "Puan"]
@@ -683,12 +684,18 @@ with sekme_yonetici:
                                 aylik["Puan"] = aylik["Puan"].round(2)
                                 aylik["PuanMetni"] = aylik["Puan"].apply(lambda v: f"{v:g}".replace(".", ","))
                                 aylik["Aralık"] = aylik["Puan"].apply(_aralik)
-                                aylar = sorted(aylik["Ay"].unique(), reverse=True)
+                                # Seçilen haftanın ayı (hafta iki aya yayılıyorsa ikisi de) otomatik gelir
+                                aylar = sorted(h_df["_dt"].dropna().dt.to_period("M").dt.to_timestamp().unique(), reverse=True)
+                                if len(aylar) == 0:
+                                    aylar = [pd.Timestamp(hafta_secenekleri[secilen_hafta]).to_period("M").to_timestamp()]
 
-                                for _sira, _ay in enumerate(aylar[:6]):
+                                for _sira, _ay in enumerate(aylar):
                                     if _sira > 0:
                                         st.markdown('<hr style="border: none; border-top: 2px dashed #CBD5E1; margin: 1rem 0 0.8rem 0;">', unsafe_allow_html=True)
                                     ay_df = aylik[aylik["Ay"] == _ay].sort_values("Puan", ascending=False)
+                                    if ay_df.empty:
+                                        st.info(f"{pd.Timestamp(_ay).strftime('%m.%Y')} ayı için puanlı kayıt bulunmuyor.")
+                                        continue
                                     ay_sirasi = ay_df["Firma"].tolist()
                                     ay_adi = pd.Timestamp(_ay).strftime("%m.%Y")
                                     ay_ort = f"{round(float(ay_df['Puan'].mean()), 2):g}".replace(".", ",")
@@ -711,8 +718,6 @@ with sekme_yonetici:
                                         _tema(alt.layer(ay_bar, ay_yazi).properties(height=max(110, 46 * len(ay_df) + 40))),
                                         use_container_width=True, theme=None,
                                     )
-                                if len(aylar) > 6:
-                                    st.caption(f"Son 6 ay gösteriliyor ({len(aylar)} aylık kayıt var).")
                             else:
                                 st.info("Aylık grafik için tarihli ve puanlı kayıt bulunmuyor.")
                         else:
