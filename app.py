@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import base64
+import os
+import re
 import streamlit as st
 import pandas as pd
 import requests
@@ -112,6 +114,22 @@ ALT_PUANLAR = [
     ("Etiket", "Etiket Puanı", "Etiket Nedeni"),
 ]
 
+# Alt puanlara ait belge/foto bağlantılarının e-tablodaki sütun başlıkları (Kod.gs ile aynı olmalı)
+ALT_BELGE = {
+    "Paketleme": "Paketleme Belge",
+    "Sevkiyat": "Sevkiyat Belge",
+    "Ürün Kalitesi": "Kalite Belge",
+    "Etiket": "Etiket Belge",
+}
+
+AY_ADLARI = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
+             "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"]
+
+def temiz_ad(metin):
+    """Dosya adında kullanılabilecek, boşluksuz ve güvenli metin üretir."""
+    t = re.sub(r"[^\w\-]+", "-", str(metin).strip(), flags=re.UNICODE).strip("-")
+    return t[:40] if t else "belge"
+
 if "form_key" not in st.session_state:
     st.session_state.form_key = 0
 if "mesaj" not in st.session_state:
@@ -157,13 +175,16 @@ def ekstra_liste_yukle():
     except Exception:
         return [], []
 
-def dosyalari_yukle(dosyalar):
+def dosyalari_yukle(dosyalar, on_ad=None):
+    """Dosyaları Apps Script ile Drive'a yükler. on_ad verilirse dosya adı 'on_ad_1.uzanti' olur."""
     if not dosyalar:
         return []
     payload_dosyalar = []
-    for f in dosyalar:
+    for i, f in enumerate(dosyalar, start=1):
+        uzanti = os.path.splitext(f.name)[1].lower()
+        yeni_ad = f"{on_ad}_{i}{uzanti}" if on_ad else f.name
         payload_dosyalar.append({
-            "name": f.name,
+            "name": yeni_ad,
             "mimeType": f.type or "application/octet-stream",
             "data": base64.b64encode(f.getvalue()).decode("utf-8"),
         })
@@ -359,15 +380,21 @@ with sekme_giris:
             )
             if puan < DUSUK_PUAN_ESIGI and not neden.strip():
                 st.markdown(f'<span style="color:#DC2626;font-weight:700;">⚠️ {etiket} düşük, neden yazınız!</span>', unsafe_allow_html=True)
-            return puan, neden.strip()
+            dosyalar = st.file_uploader(
+                f"📎 {etiket} - Belge / Fotoğraf Ekle",
+                type=["png", "jpg", "jpeg", "pdf"],
+                accept_multiple_files=True,
+                key=f"d_{anahtar}_{gkk_fk}",
+            )
+            return puan, neden.strip(), dosyalar
 
         p_col1, p_col2 = st.columns(2)
         with p_col1:
-            p_paket, n_paket = puan_alani("Paketleme Puanı", "paket", "Örn: Ambalaj kırılmış")
-            p_sevkiyat, n_sevkiyat = puan_alani("Sevkiyat Puanı", "sevkiyat", "Örn: 3 gün geç geldi")
+            p_paket, n_paket, d_paket = puan_alani("Paketleme Puanı", "paket", "Örn: Ambalaj kırılmış")
+            p_sevkiyat, n_sevkiyat, d_sevkiyat = puan_alani("Sevkiyat Puanı", "sevkiyat", "Örn: 3 gün geç geldi")
         with p_col2:
-            p_kalite, n_kalite = puan_alani("Ürün Kalitesi Puanı", "kalite", "Örn: Ölçü toleransı dışında")
-            p_etiket, n_etiket = puan_alani("Ürün Tanıtım Etiketi", "etiket", "Örn: Etiket eksik / okunmuyor")
+            p_kalite, n_kalite, d_kalite = puan_alani("Ürün Kalitesi Puanı", "kalite", "Örn: Ölçü toleransı dışında")
+            p_etiket, n_etiket, d_etiket = puan_alani("Ürün Tanıtım Etiketi", "etiket", "Örn: Etiket eksik / okunmuyor")
 
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
         st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
@@ -382,6 +409,19 @@ with sekme_giris:
             elif eksik_nedenler:
                 st.warning("⚠️ Düşük puan verdiğiniz alanların nedenini yazınız: " + ", ".join(eksik_nedenler))
             else:
+                # Belgeleri tedarikçi_tarih_ürün_kategori adıyla Drive'a yükle
+                _on_ad = f"{temiz_ad(gkk_firma)}_{gkk_tarih.strftime('%d-%m-%Y')}_{temiz_ad(gkk_urun)}"
+                belge_linkleri_gkk, yukleme_hatasi = {}, []
+                if any((d_paket, d_sevkiyat, d_kalite, d_etiket)):
+                    with st.spinner("Belgeler yükleniyor..."):
+                        for _ad, _dosyalar in (("Paketleme", d_paket), ("Sevkiyat", d_sevkiyat),
+                                               ("Ürün Kalitesi", d_kalite), ("Etiket", d_etiket)):
+                            if _dosyalar:
+                                _sonuc = dosyalari_yukle(_dosyalar, on_ad=f"{_on_ad}_{temiz_ad(_ad)}")
+                                if _sonuc is None:
+                                    yukleme_hatasi.append(_ad)
+                                else:
+                                    belge_linkleri_gkk[_ad] = ", ".join(_sonuc)
                 gkk_kayit = {
                     "tarih": gkk_tarih.strftime("%d.%m.%Y"),
                     "rapor_no": gkk_rapor_no,
@@ -400,11 +440,17 @@ with sekme_giris:
                     "puan_sevkiyat": p_sevkiyat, "neden_sevkiyat": n_sevkiyat,
                     "puan_kalite": p_kalite, "neden_kalite": n_kalite,
                     "puan_etiket": p_etiket, "neden_etiket": n_etiket,
+                    "belge_paket": belge_linkleri_gkk.get("Paketleme", ""),
+                    "belge_sevkiyat": belge_linkleri_gkk.get("Sevkiyat", ""),
+                    "belge_kalite": belge_linkleri_gkk.get("Ürün Kalitesi", ""),
+                    "belge_etiket": belge_linkleri_gkk.get("Etiket", ""),
                 }
-                if giris_kalite_kaydet(gkk_kayit):
+                if not yukleme_hatasi and giris_kalite_kaydet(gkk_kayit):
                     st.session_state.form_key += 1
                     st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı Form Yanıtları 7 sekmesine başarıyla işlendi!"
                     st.rerun()
+                elif yukleme_hatasi:
+                    st.error("❌ Belge yüklenemedi (" + ", ".join(yukleme_hatasi) + "). Kayıt yapılmadı, lütfen tekrar deneyin.")
                 else:
                     st.error("❌ Kayıt gönderilirken bir hata oluştu!")
                     if st.session_state.gkk_hata:
@@ -555,6 +601,13 @@ with sekme_yonetici:
                         if h_df[[p for _, p, _ in ALT_PUANLAR if p in h_df.columns]].apply(pd.to_numeric, errors="coerce").isna().all(axis=None):
                             st.info("Bu haftadaki kayıtlar alt puan girişinden önce yapıldığı için detay yok. Yeni kayıtlarda nedenler burada görünür.")
                         st.caption(f"Kırmızı kutular {DUSUK_PUAN_ESIGI} puanın altındaki alt puanları ve girilen nedenleri gösterir.")
+                        def _belge_linkleri(satir, ad):
+                            kol_adi = ALT_BELGE.get(ad)
+                            ham = str(satir.get(kol_adi, "")).strip() if kol_adi and kol_adi in h_df.columns else ""
+                            if not ham or ham.lower() == "nan":
+                                return []
+                            return [l.strip() for l in ham.split(",") if l.strip().startswith("http")]
+
                         for i in range(len(h_df)):
                             satir = h_df.iloc[i]
                             firma_adi = str(satir[c_firma]) if c_firma else "-"
@@ -571,17 +624,22 @@ with sekme_yonetici:
                                         n = str(satir.get(c_n, "")).strip() if c_n in h_df.columns else ""
                                         if n.lower() == "nan":
                                             n = ""
+                                        _lk = _belge_linkleri(satir, ad)
+                                        _bas = (f"<a href='{_lk[0]}' target='_blank' style='color:inherit;font-weight:700;text-decoration:underline'>{ad}</a>" if _lk else ad)
+                                        _ek = ("<div style='margin-top:0.4rem'>" + " &nbsp; ".join(
+                                            f"<a href='{l}' target='_blank' style='font-weight:700;color:#1D4ED8;text-decoration:underline'>📎 Belge {k}</a>"
+                                            for k, l in enumerate(_lk, start=1)) + "</div>") if _lk else ""
                                         if pd.isna(p):
-                                            st.markdown(f"<div style='color:#94A3B8'>{ad}<br><b>-</b></div>", unsafe_allow_html=True)
+                                            st.markdown(f"<div style='color:#94A3B8'>{_bas}<br><b>-</b>{_ek}</div>", unsafe_allow_html=True)
                                         elif p < DUSUK_PUAN_ESIGI:
                                             st.markdown(
                                                 f"<div style='background:#FEE2E2;border-left:5px solid #DC2626;padding:0.5rem 0.7rem;border-radius:8px;color:#7F1D1D'>"
-                                                f"{ad}<br><b style='font-size:1.4rem'>{p:g}</b><br>{n if n else 'Neden yazılmamış'}</div>",
+                                                f"{_bas}<br><b style='font-size:1.4rem'>{p:g}</b><br>{n if n else 'Neden yazılmamış'}{_ek}</div>",
                                                 unsafe_allow_html=True)
                                         else:
                                             st.markdown(
                                                 f"<div style='background:#F0FDF4;border-left:5px solid #16A34A;padding:0.5rem 0.7rem;border-radius:8px;color:#14532D'>"
-                                                f"{ad}<br><b style='font-size:1.4rem'>{p:g}</b>{('<br>' + n) if n else ''}</div>",
+                                                f"{_bas}<br><b style='font-size:1.4rem'>{p:g}</b>{('<br>' + n) if n else ''}{_ek}</div>",
                                                 unsafe_allow_html=True)
                                 _not = str(satir[c_not]).strip() if c_not else ""
                                 if _not and _not.lower() != "nan":
@@ -694,12 +752,15 @@ with sekme_yonetici:
                                         st.markdown('<hr style="border: none; border-top: 2px dashed #CBD5E1; margin: 1rem 0 0.8rem 0;">', unsafe_allow_html=True)
                                     ay_df = aylik[aylik["Ay"] == _ay].sort_values("Puan", ascending=False)
                                     if ay_df.empty:
-                                        st.info(f"{pd.Timestamp(_ay).strftime('%m.%Y')} ayı için puanlı kayıt bulunmuyor.")
+                                        st.info(f"{AY_ADLARI[pd.Timestamp(_ay).month - 1]} {pd.Timestamp(_ay).year} için puanlı kayıt bulunmuyor.")
                                         continue
                                     ay_sirasi = ay_df["Firma"].tolist()
-                                    ay_adi = pd.Timestamp(_ay).strftime("%m.%Y")
+                                    ay_adi = f"{AY_ADLARI[pd.Timestamp(_ay).month - 1]} {pd.Timestamp(_ay).year}"
                                     ay_ort = f"{round(float(ay_df['Puan'].mean()), 2):g}".replace(".", ",")
-                                    st.markdown(f"<div style='font-size:1.25rem;font-weight:800;color:#1E293B'>🗓️ {ay_adi} <span style='font-weight:500;font-size:1rem;color:#475569'>— {len(ay_df)} firma, ortalama {ay_ort}</span></div>", unsafe_allow_html=True)
+                                    st.markdown(
+                                        f"<div style='font-size:2rem;font-weight:900;color:#0F172A;letter-spacing:0.5px;line-height:1.2;margin-top:0.3rem'>{ay_adi}</div>"
+                                        f"<div style='font-size:1.05rem;color:#475569;margin-bottom:0.4rem'>{len(ay_df)} firma — ortalama {ay_ort}</div>",
+                                        unsafe_allow_html=True)
 
                                     ay_bar = alt.Chart(ay_df).mark_bar(cornerRadiusEnd=6).encode(
                                         x=alt.X("Puan:Q", title=None, scale=alt.Scale(domain=[0, 110]),
