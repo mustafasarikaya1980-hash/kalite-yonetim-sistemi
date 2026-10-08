@@ -781,7 +781,11 @@ if not st.session_state.oturum:
         with st.container(border=True):
             st.markdown("### 🔐 Kullanıcı Girişi")
             with st.form("giris_formu"):
-                _kadi = st.text_input("Kullanıcı Adı")
+                _secenekler = list(_kullanicilar.keys())
+                _kadi = st.selectbox(
+                    "Kullanıcı", _secenekler,
+                    format_func=lambda k: f"{_kullanicilar[k]['ad']}",
+                )
                 _sifre = st.text_input("Şifre", type="password")
                 _gonder = st.form_submit_button("GİRİŞ YAP", use_container_width=True)
             if _gonder:
@@ -791,7 +795,7 @@ if not st.session_state.oturum:
                     st.rerun()
                 else:
                     time.sleep(1)
-                    st.error("Kullanıcı adı veya şifre hatalı (ya da yetkili birim tanımlı değil).")
+                    st.error("Şifre hatalı (ya da bu kullanıcıya yetkili birim tanımlanmamış).")
     st.stop()
 
 oturum = st.session_state.oturum
