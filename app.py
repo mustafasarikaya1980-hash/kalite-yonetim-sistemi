@@ -44,8 +44,49 @@ st.markdown(
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     }
     /* Sekme başlıkları büyük */
-    button[data-baseweb="tab"] { padding: 0.9rem 1.4rem; }
-    button[data-baseweb="tab"] p { font-size: 1.35rem !important; font-weight: 800 !important; }
+    /* ANA MENÜ SEKMELERİ: büyük, kalın, renkli */
+    div[data-baseweb="tab-list"] { gap: 0.5rem; }
+    button[data-baseweb="tab"] {
+        padding: 0.9rem 1.6rem;
+        border-radius: 12px 12px 0 0;
+        background: #E0E7FF;
+        border: 2px solid #C7D2FE;
+        border-bottom: none;
+        transition: all 0.15s ease;
+    }
+    button[data-baseweb="tab"] p {
+        font-size: 1.55rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.3px;
+        color: #1E3A8A !important;
+    }
+    button[data-baseweb="tab"]:hover { background: #C7D2FE; transform: translateY(-2px); }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
+        border-color: #1E3A8A;
+        box-shadow: 0 -3px 10px rgba(37,99,235,0.35);
+    }
+    button[data-baseweb="tab"][aria-selected="true"] p { color: #FFFFFF !important; }
+    div[data-baseweb="tab-highlight"] { background-color: #F59E0B !important; height: 5px !important; }
+    div[data-baseweb="tab-border"] { background-color: #1E3A8A !important; height: 3px !important; }
+
+    /* ALT MENÜ SEKMELERİ: biraz daha küçük, turuncu vurgulu */
+    div[data-baseweb="tab-panel"] button[data-baseweb="tab"] {
+        padding: 0.65rem 1.3rem;
+        background: #FEF3C7;
+        border: 2px solid #FDE68A;
+        border-bottom: none;
+    }
+    div[data-baseweb="tab-panel"] button[data-baseweb="tab"] p { font-size: 1.25rem !important; color: #92400E !important; }
+    div[data-baseweb="tab-panel"] button[data-baseweb="tab"]:hover { background: #FDE68A; }
+    div[data-baseweb="tab-panel"] button[data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+        border-color: #B45309;
+        box-shadow: 0 -3px 10px rgba(217,119,6,0.35);
+    }
+    div[data-baseweb="tab-panel"] button[data-baseweb="tab"][aria-selected="true"] p { color: #FFFFFF !important; }
+    div[data-baseweb="tab-panel"] div[data-baseweb="tab-highlight"] { background-color: #1E3A8A !important; height: 4px !important; }
+    div[data-baseweb="tab-panel"] div[data-baseweb="tab-border"] { background-color: #D97706 !important; height: 2px !important; }
 
     /* Sayfa başlıkları */
     h1 { font-size: 2.4rem !important; font-weight: 800 !important; }
