@@ -26,6 +26,7 @@ st.markdown('<meta name="google" content="notranslate" />', unsafe_allow_html=Tr
 st.markdown(
     """
     <style>
+    /* Sekme çubuğu (sabit) */
     div[data-testid="stTabs"],
     div[data-testid="stTabs"] > div:first-child,
     div[data-baseweb="tab-list"] {
@@ -37,10 +38,28 @@ st.markdown(
         padding-bottom: 0.3rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     }
-    button[data-baseweb="tab"] { font-size: 1.05rem; font-weight: 600; }
+    /* Sekme başlıkları büyük */
+    button[data-baseweb="tab"] { padding: 0.9rem 1.4rem; }
+    button[data-baseweb="tab"] p { font-size: 1.35rem !important; font-weight: 800 !important; }
+
+    /* Sayfa başlıkları */
+    h1 { font-size: 2.4rem !important; font-weight: 800 !important; }
+    h2, div[data-testid="stHeading"] h2 { font-size: 2.2rem !important; font-weight: 800 !important; color: #0F172A; }
+    h3, div[data-testid="stHeading"] h3 { font-size: 1.7rem !important; font-weight: 700 !important; color: #1E293B; }
+    h4 { font-size: 1.35rem !important; font-weight: 700 !important; color: #1E293B; }
+
+    /* Alan etiketleri ve girişler */
+    div[data-testid="stWidgetLabel"] p, label p { font-size: 1.15rem !important; font-weight: 600 !important; color: #1E293B; }
+    input, textarea, div[data-baseweb="select"] div { font-size: 1.1rem !important; }
+    div[data-testid="stCaptionContainer"], div[data-testid="stCaptionContainer"] p { font-size: 1.05rem !important; color: #475569; }
+    div[data-testid="stMetricLabel"] p { font-size: 1.1rem !important; font-weight: 600 !important; }
+    div[data-testid="stMetricValue"] { font-size: 2.2rem !important; }
+    div[data-testid="stAlert"] p { font-size: 1.1rem !important; }
+
     div[data-testid="stVerticalBlockBorderWrapper"] { margin-bottom: 0.25rem; }
     div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, textarea { border-radius: 10px !important; }
-    div[data-testid="stButton"] button { border-radius: 10px; font-weight: 600; padding: 0.6rem 1rem; }
+    div[data-testid="stButton"] button { border-radius: 10px; font-weight: 700; padding: 0.7rem 1.1rem; }
+    div[data-testid="stButton"] button p { font-size: 1.1rem !important; }
     div.block-container { padding-top: 1.2rem; }
     </style>
     """,
@@ -199,23 +218,23 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
 st.markdown(
     """
     <div style="background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%); padding: 1.3rem 1.8rem; border-radius: 14px; margin-bottom: 0.8rem; box-shadow: 0 4px 14px rgba(37,99,235,0.25);">
-        <h1 style="color: white; margin: 0; font-size: 1.7rem; line-height: 1.2;">🏭 MSP KALİTE YÖNETİM SİSTEMİ</h1>
-        <p style="color: #DBEAFE; margin: 0.35rem 0 0 0; font-size: 0.95rem;">Saha & Giriş Kalite Kontrol Veri Girişi ve Yönetim Raporları</p>
+        <h1 style="color: white; margin: 0; font-size: 2.3rem; line-height: 1.2;">🏭 MSP KALİTE YÖNETİM SİSTEMİ</h1>
+        <p style="color: #DBEAFE; margin: 0.4rem 0 0 0; font-size: 1.15rem;">Saha & Giriş Kalite Kontrol Veri Girişi ve Yönetim Raporları</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-sekme_saha, sekme_giris, sekme_yonetici, sekme_ayarlar = st.tabs([
-    "📱 SAHA VERİ GİRİŞİ",
+sekme_giris, sekme_saha, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📦 GİRİŞ KALİTE KONTROL",
+    "📱 SAHA VERİ GİRİŞİ",
     "📊 YÖNETİCİ PANELİ & ANALİZ",
     "⚙️ YÖNETİM & AYARLAR",
 ])
 
 ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
-# --- 1. SEKME ---
+# --- 1. SEKME: SAHA VERİ GİRİŞİ ---
 with sekme_saha:
     st.header("Saha Kalite Kontrol Formu")
     if st.session_state.mesaj:
@@ -256,7 +275,7 @@ with sekme_saha:
                 st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
                 st.rerun()
 
-# --- 2. SEKME ---
+# --- 2. SEKME: GİRİŞ KALİTE KONTROL ---
 with sekme_giris:
     st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
     st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri doğrudan Form Yanıtları 7 sekmesine işlenir.")
@@ -459,44 +478,121 @@ with sekme_yonetici:
 
                 # ---------- SAĞ: üstte tedarikçi fikstürü, altta aylık grafik ----------
                 with col_sag:
-                    st.subheader("📊 Tedarikçi Puan Fikstürü")
-                    st.caption(secilen_hafta)
-                    if c_puan and c_firma:
-                        grafik_df = h_df[[c_firma, c_puan]].copy()
-                        grafik_df[c_puan] = pd.to_numeric(grafik_df[c_puan], errors="coerce")
-                        grafik_df = grafik_df.dropna()
-                        if not grafik_df.empty:
-                            grafik_df = grafik_df.groupby(c_firma, as_index=False)[c_puan].mean()
-                            grafik_df[c_puan] = grafik_df[c_puan].round(2)
-                            puan_chart = alt.Chart(grafik_df).mark_bar(color="#2563EB", cornerRadiusEnd=6).encode(
-                                x=alt.X(f"{c_puan}:Q", title="Değerlendirme Puanı (100 üzerinden)", scale=alt.Scale(domain=[0, 100])),
-                                y=alt.Y(f"{c_firma}:N", sort="-x", title="Tedarikçi Firma"),
-                                tooltip=[c_firma, c_puan]
-                            ).properties(height=max(120, 45 * len(grafik_df) + 50))
-                            st.altair_chart(puan_chart, use_container_width=True)
-                        else:
-                            st.info("Bu hafta için sayısal puan bulunmuyor.")
-                    else:
-                        st.info("Puan veya firma sütunu eksik.")
+                    PUAN_ARALIKLARI = ["85 - 100  Çok İyi", "70 - 84  İyi", "50 - 69  Orta", "0 - 49  Zayıf"]
+                    PUAN_RENKLERI = ["#16A34A", "#2563EB", "#F59E0B", "#DC2626"]
 
-                    st.subheader("📈 Aylık Puan Grafiği")
-                    st.caption("Tedarikçi bazında aylık ortalama puan (tüm kayıtlar)")
-                    if c_puan and c_firma:
-                        trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
-                        trend_df[c_puan] = pd.to_numeric(trend_df[c_puan], errors="coerce")
-                        trend_df = trend_df.dropna()
-                        if not trend_df.empty:
-                            trend_df["Ay"] = trend_df["_dt"].dt.to_period("M").dt.to_timestamp()
-                            aylik = trend_df.groupby(["Ay", c_firma], as_index=False)[c_puan].mean()
-                            aylik[c_puan] = aylik[c_puan].round(2)
-                            trend_chart = alt.Chart(aylik).mark_line(point=True).encode(
-                                x=alt.X("Ay:T", title="Ay", axis=alt.Axis(format="%m.%Y")),
-                                y=alt.Y(f"{c_puan}:Q", title="Ortalama Puan", scale=alt.Scale(domain=[0, 100])),
-                                color=alt.Color(f"{c_firma}:N", title="Tedarikçi"),
-                                tooltip=[alt.Tooltip("Ay:T", format="%m.%Y"), c_firma, c_puan],
-                            ).properties(height=300)
-                            st.altair_chart(trend_chart, use_container_width=True)
+                    def _aralik(p):
+                        if p >= 85:
+                            return PUAN_ARALIKLARI[0]
+                        if p >= 70:
+                            return PUAN_ARALIKLARI[1]
+                        if p >= 50:
+                            return PUAN_ARALIKLARI[2]
+                        return PUAN_ARALIKLARI[3]
+
+                    def _tema(grafik):
+                        return (
+                            grafik.configure_view(strokeWidth=0)
+                            .configure_axis(
+                                labelFontSize=13, titleFontSize=13, titleFontWeight="bold",
+                                labelColor="#334155", titleColor="#334155",
+                                gridColor="#E2E8F0", domainColor="#CBD5E1", tickColor="#CBD5E1",
+                            )
+                            .configure_legend(
+                                labelFontSize=13, titleFontSize=13, titleFontWeight="bold",
+                                orient="bottom", symbolType="square", symbolSize=140,
+                            )
+                        )
+
+                    with st.container(border=True):
+                        st.subheader("📊 Tedarikçi Puan Fikstürü")
+                        st.caption(secilen_hafta)
+                        if c_puan and c_firma:
+                            grafik_df = h_df[[c_firma, c_puan]].copy()
+                            grafik_df.columns = ["Firma", "Puan"]
+                            grafik_df["Puan"] = pd.to_numeric(grafik_df["Puan"], errors="coerce")
+                            grafik_df = grafik_df.dropna()
+                            if not grafik_df.empty:
+                                grafik_df = grafik_df.groupby("Firma", as_index=False)["Puan"].mean()
+                                grafik_df["Puan"] = grafik_df["Puan"].round(1)
+                                grafik_df["Aralık"] = grafik_df["Puan"].apply(_aralik)
+                                hafta_ort = round(float(grafik_df["Puan"].mean()), 1)
+
+                                bar = alt.Chart(grafik_df).mark_bar(cornerRadiusEnd=8, size=30).encode(
+                                    x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105]),
+                                            axis=alt.Axis(values=[0, 20, 40, 60, 80, 100])),
+                                    y=alt.Y("Firma:N", sort="-x", title=None, axis=alt.Axis(labelLimit=240, labelFontSize=14, labelFontWeight="bold")),
+                                    color=alt.Color("Aralık:N",
+                                                    scale=alt.Scale(domain=PUAN_ARALIKLARI, range=PUAN_RENKLERI),
+                                                    legend=alt.Legend(title="Puan Aralığı", columns=2)),
+                                    tooltip=[alt.Tooltip("Firma:N"), alt.Tooltip("Puan:Q", format=".1f"), alt.Tooltip("Aralık:N")],
+                                )
+                                etiket = alt.Chart(grafik_df).mark_text(align="left", dx=6, fontSize=15, fontWeight="bold", color="#0F172A").encode(
+                                    x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])),
+                                    y=alt.Y("Firma:N", sort="-x", title=None),
+                                    text=alt.Text("Puan:Q", format=".0f"),
+                                )
+                                ort_cizgi = alt.Chart(pd.DataFrame({"Ortalama": [hafta_ort]})).mark_rule(
+                                    strokeDash=[6, 4], strokeWidth=2, color="#475569"
+                                ).encode(x=alt.X("Ortalama:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])), tooltip=[alt.Tooltip("Ortalama:Q", title="Hafta ortalaması", format=".1f")])
+
+                                fiksturu = _tema(alt.layer(bar, etiket, ort_cizgi).properties(
+                                    height=max(140, 52 * len(grafik_df) + 70)
+                                ))
+                                st.altair_chart(fiksturu, use_container_width=True, theme=None)
+                                st.caption(f"Kesikli çizgi: haftanın ortalama puanı ({hafta_ort:g})")
+                            else:
+                                st.info("Bu hafta için sayısal puan bulunmuyor.")
                         else:
-                            st.info("Aylık grafik için tarihli ve puanlı kayıt bulunmuyor.")
-                    else:
-                        st.info("Aylık grafik için puan ve firma sütunları gerekli.")
+                            st.info("Puan veya firma sütunu eksik.")
+
+                    with st.container(border=True):
+                        st.subheader("📈 Aylık Puan Grafiği")
+                        st.caption("Tedarikçi bazında aylık ortalama puan (tüm kayıtlar)")
+                        if c_puan and c_firma:
+                            trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
+                            trend_df.columns = ["Tarih", "Firma", "Puan"]
+                            trend_df["Puan"] = pd.to_numeric(trend_df["Puan"], errors="coerce")
+                            trend_df = trend_df.dropna()
+                            if not trend_df.empty:
+                                trend_df["Ay"] = trend_df["Tarih"].dt.to_period("M").dt.to_timestamp()
+                                aylik = trend_df.groupby(["Ay", "Firma"], as_index=False)["Puan"].mean()
+                                aylik["Puan"] = aylik["Puan"].round(1)
+
+                                temel = alt.Chart(aylik).encode(
+                                    x=alt.X("Ay:T", title=None, axis=alt.Axis(format="%m.%Y", labelAngle=0, tickCount="month")),
+                                    y=alt.Y("Puan:Q", title="Ortalama Puan", scale=alt.Scale(domain=[0, 100])),
+                                    color=alt.Color("Firma:N", scale=alt.Scale(scheme="tableau10"),
+                                                    legend=alt.Legend(title=None, columns=2)),
+                                )
+                                cizgi = temel.mark_line(strokeWidth=3, interpolate="monotone")
+                                noktalar = temel.mark_point(filled=True, size=120, opacity=1).encode(
+                                    tooltip=[alt.Tooltip("Firma:N"), alt.Tooltip("Ay:T", title="Ay", format="%m.%Y"), alt.Tooltip("Puan:Q", format=".1f")]
+                                )
+                                degerler = temel.mark_text(dy=-14, fontSize=13, fontWeight="bold").encode(text=alt.Text("Puan:Q", format=".0f"))
+
+                                aylik_grafik = _tema(alt.layer(cizgi, noktalar, degerler).properties(height=320))
+                                st.altair_chart(aylik_grafik, use_container_width=True, theme=None)
+                            else:
+                                st.info("Aylık grafik için tarihli ve puanlı kayıt bulunmuyor.")
+                        else:
+                            st.info("Aylık grafik için puan ve firma sütunları gerekli.")
+        else:
+            st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
+
+# --- 4. SEKME: YÖNETİM & AYARLAR ---
+with sekme_ayarlar:
+    st.header("Personel ve Parça Listesini Yönet")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        yeni_p = st.text_input("Personel Adı Soyadı", key="yeni_p_input")
+        if st.button("Personel Ekle", key="btn_p_ekle") and yeni_p.strip():
+            if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
+                st.success("✅ Personel eklendi!")
+                st.rerun()
+    with col_p2:
+        yeni_parca = st.text_input("Parça Adı", key="yeni_parca_input")
+        if st.button("Parça Ekle", key="btn_parca_ekle") and yeni_parca.strip():
+            if kalici_liste_ekle("PARCA", yeni_parca.strip()):
+                st.success("✅ Parça eklendi!")
+                st.rerun()
