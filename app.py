@@ -138,6 +138,8 @@ if "gkk_mesaj" not in st.session_state:
     st.session_state.gkk_mesaj = None
 if "gkk_hata" not in st.session_state:
     st.session_state.gkk_hata = None
+if "belge_hata" not in st.session_state:
+    st.session_state.belge_hata = None
 
 @st.cache_data(ttl=5, show_spinner=False)
 def verileri_yukle():
@@ -188,11 +190,20 @@ def dosyalari_yukle(dosyalar, on_ad=None):
             "mimeType": f.type or "application/octet-stream",
             "data": base64.b64encode(f.getvalue()).decode("utf-8"),
         })
+    st.session_state.belge_hata = None
     try:
-        resp = requests.post(APPS_SCRIPT_URL, json={"files": payload_dosyalar}, headers=_HEADERS, timeout=60)
-        sonuc = resp.json()
-        return sonuc.get("links", []) if sonuc.get("success") else None
-    except Exception:
+        resp = requests.post(APPS_SCRIPT_URL, json={"files": payload_dosyalar}, headers=_HEADERS, timeout=120)
+        try:
+            sonuc = resp.json()
+        except Exception:
+            st.session_state.belge_hata = f"HTTP {resp.status_code} - Yanıt JSON değil: {resp.text[:300]}"
+            return None
+        if sonuc.get("success"):
+            return sonuc.get("links", [])
+        st.session_state.belge_hata = f"Apps Script hatası: {sonuc.get('error')}"
+        return None
+    except Exception as e:
+        st.session_state.belge_hata = f"Bağlantı hatası: {e}"
         return None
 
 def veri_kaydet(yeni_veri: dict) -> bool:
@@ -420,6 +431,7 @@ with sekme_giris:
                                 _sonuc = dosyalari_yukle(_dosyalar, on_ad=f"{_on_ad}_{temiz_ad(_ad)}")
                                 if _sonuc is None:
                                     yukleme_hatasi.append(_ad)
+                                    break
                                 else:
                                     belge_linkleri_gkk[_ad] = ", ".join(_sonuc)
                 gkk_kayit = {
@@ -451,6 +463,8 @@ with sekme_giris:
                     st.rerun()
                 elif yukleme_hatasi:
                     st.error("❌ Belge yüklenemedi (" + ", ".join(yukleme_hatasi) + "). Kayıt yapılmadı, lütfen tekrar deneyin.")
+                    if st.session_state.belge_hata:
+                        st.code(st.session_state.belge_hata)
                 else:
                     st.error("❌ Kayıt gönderilirken bir hata oluştu!")
                     if st.session_state.gkk_hata:
