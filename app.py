@@ -133,7 +133,12 @@ def verileri_yukle():
 def giris_kalite_yukle():
     try:
         df = pd.read_csv(CSV_GIRIS_URL)
-        return df.dropna(how="all")
+        df = df.dropna(how="all")
+        # Puan sütunlarında virgüllü ondalıkları (61,5) sayıya çevir
+        for c in df.columns:
+            if any(x in str(c).lower() for x in ("puan", "100", "değerlendirme")):
+                df[c] = pd.to_numeric(df[c].astype(str).str.strip().str.replace(",", ".", regex=False), errors="coerce")
+        return df
     except Exception:
         return pd.DataFrame()
 
