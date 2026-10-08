@@ -535,6 +535,16 @@ with sekme_yonetici:
                     stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
                     st.dataframe(stilli, use_container_width=True, hide_index=True)
 
+                    # --- Hafta özeti: adet, ortalama, en düşük, en yüksek ---
+                    _puanlar = h_df["_p"].dropna()
+                    with st.container(border=True):
+                        bolum_baslik("📌 Hafta Özeti")
+                        o1, o2, o3, o4 = st.columns(4)
+                        o1.metric("Toplam Giriş Kontrol", f"{len(h_df)} Adet")
+                        o2.metric("Ortalama Puan", f"{_puanlar.mean():.1f}" if not _puanlar.empty else "-")
+                        o3.metric("En Düşük Puan", f"{_puanlar.min():g}" if not _puanlar.empty else "-")
+                        o4.metric("En Yüksek Puan", f"{_puanlar.max():g}" if not _puanlar.empty else "-")
+
                     # --- Puan detayı: 4 alt puan, nedenleri ve ek açıklama ---
                     ayirici()
                     bolum_baslik("🔍 Puan Detayı ve Nedenler")
@@ -623,12 +633,14 @@ with sekme_yonetici:
                                 grafik_df = grafik_df.groupby("Firma", as_index=False)["Puan"].mean()
                                 grafik_df["Puan"] = grafik_df["Puan"].round(1)
                                 grafik_df["Aralık"] = grafik_df["Puan"].apply(_aralik)
+                                # En yüksek puan en üstte olacak şekilde firma sırası
+                                firma_sirasi = grafik_df.sort_values("Puan", ascending=False)["Firma"].tolist()
                                 hafta_ort = round(float(grafik_df["Puan"].mean()), 1)
 
                                 bar = alt.Chart(grafik_df).mark_bar(cornerRadiusEnd=8).encode(
                                     x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105]),
                                             axis=alt.Axis(values=[0, 20, 40, 60, 80, 100])),
-                                    y=alt.Y("Firma:N", sort="-x", title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2),
+                                    y=alt.Y("Firma:N", sort=firma_sirasi, title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2),
                                             axis=alt.Axis(labelLimit=240, labelFontSize=14, labelFontWeight="bold", labelPadding=12)),
                                     color=alt.Color("Aralık:N",
                                                     scale=alt.Scale(domain=PUAN_ARALIKLARI, range=PUAN_RENKLERI),
@@ -637,7 +649,7 @@ with sekme_yonetici:
                                 )
                                 etiket = alt.Chart(grafik_df).mark_text(align="left", dx=6, fontSize=15, fontWeight="bold", color="#0F172A").encode(
                                     x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])),
-                                    y=alt.Y("Firma:N", sort="-x", title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2)),
+                                    y=alt.Y("Firma:N", sort=firma_sirasi, title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2)),
                                     text=alt.Text("Puan:Q", format=".0f"),
                                 )
                                 ort_cizgi = alt.Chart(pd.DataFrame({"Ortalama": [hafta_ort]})).mark_rule(
