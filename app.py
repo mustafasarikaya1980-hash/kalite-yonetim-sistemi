@@ -44,34 +44,57 @@ st.markdown(
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
     }
     /* Sekme başlıkları büyük */
-    /* ANA MENÜ SEKMELERİ: büyük, kalın, renkli */
-    div[data-baseweb="tab-list"] { gap: 0.5rem; }
-    button[data-baseweb="tab"] {
-        padding: 0.9rem 1.6rem;
-        border-radius: 12px 12px 0 0;
-        background: #E0E7FF;
-        border: 2px solid #C7D2FE;
-        border-bottom: none;
+    /* TÜM SEKME MENÜLERİ (ana ve alt): büyük, kalın, renkli */
+    div[role="tablist"], div[data-baseweb="tab-list"] { gap: 0.5rem !important; }
+    button[role="tab"],
+    button[data-baseweb="tab"],
+    button[data-testid="stTab"] {
+        padding: 0.9rem 1.6rem !important;
+        border-radius: 12px 12px 0 0 !important;
+        background: #E0E7FF !important;
+        border: 2px solid #C7D2FE !important;
+        border-bottom: none !important;
+        height: auto !important;
         transition: all 0.15s ease;
     }
-    button[data-baseweb="tab"] p {
+    button[role="tab"] p,
+    button[data-baseweb="tab"] p,
+    button[data-testid="stTab"] p,
+    button[role="tab"] span,
+    button[data-baseweb="tab"] span,
+    button[data-testid="stTab"] span,
+    button[role="tab"] div,
+    button[data-baseweb="tab"] div,
+    button[data-testid="stTab"] div {
         font-size: 1.55rem !important;
         font-weight: 900 !important;
         letter-spacing: 0.3px;
         color: #1E3A8A !important;
+        line-height: 1.3 !important;
     }
-    button[data-baseweb="tab"]:hover { background: #C7D2FE; transform: translateY(-2px); }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
-        border-color: #1E3A8A;
+    button[role="tab"]:hover,
+    button[data-baseweb="tab"]:hover,
+    button[data-testid="stTab"]:hover { background: #C7D2FE !important; transform: translateY(-2px); }
+    button[role="tab"][aria-selected="true"],
+    button[data-baseweb="tab"][aria-selected="true"],
+    button[data-testid="stTab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%) !important;
+        border-color: #1E3A8A !important;
         box-shadow: 0 -3px 10px rgba(37,99,235,0.35);
     }
-    button[data-baseweb="tab"][aria-selected="true"] p { color: #FFFFFF !important; }
+    button[role="tab"][aria-selected="true"] p,
+    button[data-baseweb="tab"][aria-selected="true"] p,
+    button[data-testid="stTab"][aria-selected="true"] p,
+    button[role="tab"][aria-selected="true"] span,
+    button[data-baseweb="tab"][aria-selected="true"] span,
+    button[data-testid="stTab"][aria-selected="true"] span,
+    button[role="tab"][aria-selected="true"] div,
+    button[data-baseweb="tab"][aria-selected="true"] div,
+    button[data-testid="stTab"][aria-selected="true"] div { color: #FFFFFF !important; }
     div[data-baseweb="tab-highlight"] { background-color: #F59E0B !important; height: 5px !important; }
     div[data-baseweb="tab-border"] { background-color: #1E3A8A !important; height: 3px !important; }
 
-    /* TÜM MENÜ VE BÖLÜM BAŞLIKLARI: aynı büyük, kalın, renkli tema (alt menüler dahil) */
-    div[data-baseweb="tab-panel"] button[data-baseweb="tab"] { margin-top: 0.3rem; }
+    /* BÖLÜM BAŞLIKLARI */
     h2, h3, div[data-testid="stHeading"] h2, div[data-testid="stHeading"] h3 {
         color: #1E3A8A !important;
         font-weight: 900 !important;
