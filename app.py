@@ -204,6 +204,21 @@ def puan_metni(seri):
     sayi = pd.to_numeric(seri, errors="coerce")
     return [f"{v:g}" if pd.notna(v) else ("" if pd.isna(o) else str(o)) for v, o in zip(sayi, seri)]
 
+def bolum_baslik(metin):
+    """Renkli sol çizgili, belirgin bölüm başlığı."""
+    st.markdown(
+        f'<div style="border-left: 7px solid #2563EB; padding: 0.15rem 0 0.15rem 0.9rem; margin: 0.4rem 0 0.6rem 0; '
+        f'font-size: 1.7rem; font-weight: 800; color: #0F172A;">{metin}</div>',
+        unsafe_allow_html=True,
+    )
+
+def ayirici():
+    """Bölümler arasına belirgin yatay çizgi koyar."""
+    st.markdown(
+        '<hr style="border: none; border-top: 3px solid #CBD5E1; margin: 2rem 0 1.6rem 0;">',
+        unsafe_allow_html=True,
+    )
+
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
     try:
@@ -418,11 +433,12 @@ with sekme_yonetici:
                 secilen_hafta = st.selectbox("🔎 Hafta seç", list(hafta_secenekleri.keys()), key="hafta_sec")
                 h_df = df_gkk[df_gkk["_hafta_bas"] == hafta_secenekleri[secilen_hafta]]
 
+                ayirici()
                 col_sol, col_sag = st.columns([1.3, 0.7])
 
                 # ---------- SOL: seçilen haftanın raporu ----------
                 with col_sol:
-                    st.subheader("📅 Haftalık Rapor")
+                    bolum_baslik("📅 Haftalık Rapor")
                     st.caption(f"{secilen_hafta} — {len(h_df)} giriş kalite. Satır renkleri: KABUL yeşil, ŞARTLI KABUL sarı, RED kırmızı. Puana göre sıralıdır (en yüksek en üstte, en düşük en altta).")
 
                     # Puana göre sırala: en yüksek (1.) en üstte, en düşük (sonuncu) en altta
@@ -505,7 +521,7 @@ with sekme_yonetici:
                         )
 
                     with st.container(border=True):
-                        st.subheader("📊 Tedarikçi Puan Fikstürü")
+                        bolum_baslik("📊 Tedarikçi Puan Fikstürü")
                         st.caption(secilen_hafta)
                         if c_puan and c_firma:
                             grafik_df = h_df[[c_firma, c_puan]].copy()
@@ -518,10 +534,11 @@ with sekme_yonetici:
                                 grafik_df["Aralık"] = grafik_df["Puan"].apply(_aralik)
                                 hafta_ort = round(float(grafik_df["Puan"].mean()), 1)
 
-                                bar = alt.Chart(grafik_df).mark_bar(cornerRadiusEnd=8, size=30).encode(
+                                bar = alt.Chart(grafik_df).mark_bar(cornerRadiusEnd=8).encode(
                                     x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105]),
                                             axis=alt.Axis(values=[0, 20, 40, 60, 80, 100])),
-                                    y=alt.Y("Firma:N", sort="-x", title=None, axis=alt.Axis(labelLimit=240, labelFontSize=14, labelFontWeight="bold")),
+                                    y=alt.Y("Firma:N", sort="-x", title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2),
+                                            axis=alt.Axis(labelLimit=240, labelFontSize=14, labelFontWeight="bold", labelPadding=12)),
                                     color=alt.Color("Aralık:N",
                                                     scale=alt.Scale(domain=PUAN_ARALIKLARI, range=PUAN_RENKLERI),
                                                     legend=alt.Legend(title="Puan Aralığı", columns=2)),
@@ -529,7 +546,7 @@ with sekme_yonetici:
                                 )
                                 etiket = alt.Chart(grafik_df).mark_text(align="left", dx=6, fontSize=15, fontWeight="bold", color="#0F172A").encode(
                                     x=alt.X("Puan:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])),
-                                    y=alt.Y("Firma:N", sort="-x", title=None),
+                                    y=alt.Y("Firma:N", sort="-x", title=None, scale=alt.Scale(paddingInner=0.45, paddingOuter=0.2)),
                                     text=alt.Text("Puan:Q", format=".0f"),
                                 )
                                 ort_cizgi = alt.Chart(pd.DataFrame({"Ortalama": [hafta_ort]})).mark_rule(
@@ -537,7 +554,7 @@ with sekme_yonetici:
                                 ).encode(x=alt.X("Ortalama:Q", title="Puan (100 üzerinden)", scale=alt.Scale(domain=[0, 105])), tooltip=[alt.Tooltip("Ortalama:Q", title="Hafta ortalaması", format=".1f")])
 
                                 fiksturu = _tema(alt.layer(bar, etiket, ort_cizgi).properties(
-                                    height=max(140, 52 * len(grafik_df) + 70)
+                                    height=max(160, 70 * len(grafik_df) + 60)
                                 ))
                                 st.altair_chart(fiksturu, use_container_width=True, theme=None)
                                 st.caption(f"Kesikli çizgi: haftanın ortalama puanı ({hafta_ort:g})")
@@ -546,8 +563,10 @@ with sekme_yonetici:
                         else:
                             st.info("Puan veya firma sütunu eksik.")
 
+                    ayirici()
+
                     with st.container(border=True):
-                        st.subheader("📈 Aylık Puan Grafiği")
+                        bolum_baslik("📈 Aylık Puan Grafiği")
                         st.caption("Tedarikçi bazında aylık ortalama puan (tüm kayıtlar)")
                         if c_puan and c_firma:
                             trend_df = df_gkk[["_dt", c_firma, c_puan]].copy()
