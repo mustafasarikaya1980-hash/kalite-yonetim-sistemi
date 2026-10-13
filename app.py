@@ -145,6 +145,24 @@ CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9xKz14pVGDNPDkUlUsztvrOK6WEAUOmbXDWBNcpwL70lcg8QRR1AVwKNEXAEoi40P/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
+DUSUK_PUAN_ESIGI = 70
+
+ALT_PUANLAR = [
+    ("Paketleme", "Paketleme Puanı", "Paketleme Nedeni"),
+    ("Sevkiyat", "Sevkiyat Puanı", "Sevkiyat Nedeni"),
+    ("Ürün Kalitesi", "Kalite Puanı", "Kalite Nedeni"),
+    ("Etiket", "Etiket Puanı", "Etiket Nedeni"),
+]
+
+ALT_BELGE = {
+    "Paketleme": "Paketleme Belge",
+    "Sevkiyat": "Sevkiyat Belge",
+    "Ürün Kalitesi": "Kalite Belge",
+    "Etiket": "Etiket Belge",
+}
+
+AY_ADLARI = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
+             "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"]
 
 def temiz_ad(metin):
     t = re.sub(r"[^\w\-]+", "-", str(metin).strip(), flags=re.UNICODE).strip("-")
@@ -224,6 +242,28 @@ def dosyalari_yukle(dosyalar, on_ad=None):
         st.session_state.belge_hata = f"Bağlantı hatası: {e}"
         return None
 
+def veri_kaydet(yeni_veri: dict) -> bool:
+    payload = {
+        ENTRY_PERSONEL: yeni_veri["personel"],
+        ENTRY_PARCA: yeni_veri["parca"],
+        ENTRY_RET_NEDENI: yeni_veri["ret_nedeni"],
+        ENTRY_OP_ADI: yeni_veri["op_adi"],
+        ENTRY_CNC_NO: yeni_veri["cnc_no"],
+        ENTRY_ACIKLAMA: yeni_veri["aciklama"],
+        ENTRY_RET_MIKTARI: yeni_veri["ret_miktari"],
+        ENTRY_URETIM_MIKTARI: yeni_veri["uretim_miktari"],
+        ENTRY_BELGE_LINKLERI: yeni_veri.get("belge_linkleri", ""),
+        "emailAddress": SABIT_EPOSTA,
+    }
+    try:
+        resp = requests.post(FORM_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
+        if resp.status_code in (200, 302):
+            verileri_yukle.clear()
+            return True
+        return False
+    except Exception:
+        return False
+
 def giris_kalite_kaydet(gkk_veri: dict) -> bool:
     st.session_state.gkk_hata = None
     try:
@@ -245,8 +285,6 @@ def giris_kalite_kaydet(gkk_veri: dict) -> bool:
 def kayit_sil(satir_index: int) -> bool:
     """Yönetici panelinden seçilen satırı Apps Script aracılığıyla siler."""
     try:
-        # CSV tablosu 0 tabanlıdır. Excel/E-Tablo başlığı 1. satırdır.
-        # Gerçek satır numarası = satir_index + 2
         gercek_satir = satir_index + 2
         resp = requests.post(APPS_SCRIPT_URL, json={"islem": "sil", "satir_index": gercek_satir}, headers=_HEADERS, timeout=15)
         if resp.status_code in (200, 302):
@@ -257,6 +295,10 @@ def kayit_sil(satir_index: int) -> bool:
         return False
     except Exception:
         return False
+
+def puan_metni(seri):
+    sayi = pd.to_numeric(seri, errors="coerce")
+    return [f"{v:g}" if pd.notna(v) else ("" if pd.isna(o) else str(o)) for v, o in zip(sayi, seri)]
 
 def bolum_baslik(metin):
     st.markdown(
@@ -270,6 +312,93 @@ def ayirici():
         '<hr style="border: none; border-top: 3px solid #CBD5E1; margin: 2rem 0 1.6rem 0;">',
         unsafe_allow_html=True,
     )
+
+def kalici_liste_ekle(tip: str, deger: str) -> bool:
+    payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
+    try:
+        resp = requests.post(FORM2_RESPONSE_URL, data=payload, headers=_HEADERS, timeout=15)
+        if resp.status_code in (200, 302):
+            ekstra_liste_yukle.clear()
+            return True
+        return False
+    except Exception:
+        return False
+
+BIRIM_SIRASI = ["GIRIS", "CNC", "ROTOR", "MONTAJ", "POMPA"]
+
+BIRIMLER = {
+    "GIRIS": {"baslik": "📦 GİRİŞ KALİTE KONTROL", "ad": "Giriş Kalite Kontrol"},
+    "CNC": {"baslik": "🔧 CNC SAHA KONTROL", "ad": "CNC Saha Kontrol"},
+    "ROTOR": {
+        "baslik": "🧲 ROTOR & STATOR KONTROL",
+        "ad": "Rotor & Stator Kontrol",
+        "listeler": {
+            "PERSONEL": "Kalite Personeli",
+            "MALZEME": "Rotor / Stator Modelleri",
+            "ASAMA": "Kontrol Aşamaları",
+            "HATA": "Hata / Ret Nedenleri",
+        },
+        "varsayilan": {
+            "MALZEME": ["ROTOR", "STATOR"],
+            "ASAMA": ["GELEN MALZEME", "PROSES ARASI", "SON KONTROL"],
+            "HATA": ["SARGI HATASI", "İZOLASYON HATASI", "ÖLÇÜ HATASI", "YÜZEY HATASI", "BALANS HATASI", "DİĞER"],
+        },
+        "alanlar": [
+            {"anahtar": "Rotor / Stator Modeli", "tip": "secim", "liste": "MALZEME", "zorunlu": True},
+            {"anahtar": "Kontrol Aşaması", "tip": "secim", "liste": "ASAMA", "zorunlu": True},
+            {"anahtar": "Hata Nedeni", "tip": "secim", "liste": "HATA"},
+            {"anahtar": "Açıklama", "tip": "metin", "ornek": "Örn: Sargı uç bağlantısı gevşek"},
+            {"anahtar": "Ret Adedi", "tip": "sayi"},
+            {"anahtar": "Kontrol Edilen Adet", "tip": "sayi"},
+        ],
+        "model_alani": "Rotor / Stator Modeli",
+        "ret_alani": "Ret Adedi", "hata_alani": "Hata Nedeni", "adet_alani": "Kontrol Edilen Adet",
+    },
+    "MONTAJ": {
+        "baslik": "⚡ MOTOR MONTAJ & SON KONTROL",
+        "ad": "Motor Montaj & Son Kontrol",
+        "listeler": {
+            "PERSONEL": "Kalite Personeli",
+            "MALZEME": "Motor Modelleri",
+            "KONTROL": "Kontrol Listesi Maddeleri",
+        },
+        "varsayilan": {
+            "MALZEME": ["4\" MOTOR", "6\" MOTOR", "8\" MOTOR"],
+            "KONTROL": ["Sargı direnci", "İzolasyon direnci (megger)", "Yatak / rulman kontrolü", "Mil salgısı",
+                        "Kablo ve bağlantılar", "Etiket ve seri no", "Boya ve görünüm", "Boşta çalışma testi"],
+        },
+        "alanlar": [
+            {"anahtar": "Motor Modeli", "tip": "secim", "liste": "MALZEME", "zorunlu": True},
+            {"anahtar": "Seri No", "tip": "metin", "ornek": "Örn: 26-0458", "zorunlu": True},
+            {"anahtar": "Kontrol Listesi", "tip": "kontrol", "liste": "KONTROL"},
+            {"anahtar": "Açıklama", "tip": "metin", "ornek": "Uygunsuzluk varsa nedenini yazın"},
+        ],
+        "model_alani": "Motor Modeli",
+    },
+    "POMPA": {
+        "baslik": "💧 POMPA ÜRETİM & TEST KONTROL",
+        "ad": "Pompa Üretim & Test Kontrol",
+        "listeler": {
+            "PERSONEL": "Kalite Personeli",
+            "MALZEME": "Pompa Modelleri",
+            "KONTROL": "Kontrol Listesi Maddeleri",
+        },
+        "varsayilan": {
+            "MALZEME": [],
+            "KONTROL": ["Basınç testi", "Debi testi", "Sızdırmazlık", "Gürültü / titreşim", "Akım değeri", "Görünüm ve etiket"],
+        },
+        "alanlar": [
+            {"anahtar": "Pompa Modeli", "tip": "secim", "liste": "MALZEME", "zorunlu": True},
+            {"anahtar": "Seri No", "tip": "metin", "ornek": "Örn: P-26-0012", "zorunlu": True},
+            {"anahtar": "Kontrol Listesi", "tip": "kontrol", "liste": "KONTROL"},
+            {"anahtar": "Basınç (bar)", "tip": "olcum", "ornek": "Örn: 4,5"},
+            {"anahtar": "Debi (m³/h)", "tip": "olcum", "ornek": "Örn: 12,3"},
+            {"anahtar": "Akım (A)", "tip": "olcum", "ornek": "Örn: 6,8"},
+            {"anahtar": "Açıklama", "tip": "metin", "ornek": "Uygunsuzluk varsa nedenini yazın"},
+        ],
+        "model_alani": "Pompa Modeli",
+    },
+}
 
 def apps_script_gonder(payload, zaman_asimi=30):
     try:
@@ -308,7 +437,11 @@ def birim_listeleri_yukle():
         pass
     return sonuc
 
-# Ana Sekme Yapısı
+def liste_getir(kod, tip, listeler):
+    cfg = BIRIMLER[kod]
+    return listeler.get(kod, {}).get(tip) or cfg.get("varsayilan", {}).get(tip, [])
+
+# Üst Başlık
 st.markdown(
     """
     <div style="background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%); padding: 1.3rem 1.8rem; border-radius: 14px; margin-bottom: 0.8rem; box-shadow: 0 4px 14px rgba(37,99,235,0.25);">
@@ -319,11 +452,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-sekme_giris, sekme_yonetici, sekme_ayarlar = st.tabs([
+# Ana Sekmeler (Orijinal Düzen)
+sekme_giris, sekme_cnc, sekme_rotor, sekme_montaj, sekme_pompa, sekme_yonetici, sekme_ayarlar = st.tabs([
     "📦 GİRİŞ KALİTE KONTROL",
-    "📊 YÖNETİCİ PANELİ & KAYIT YÖNETİMİ",
-    "⚙️ YÖNETİM & AYARLAR",
+    "🔧 CNC SAHA KONTROL",
+    "🧲 ROTOR & STATOR",
+    "⚡ MOTOR MONTAJ",
+    "💧 POMPA TEST",
+    "📊 YÖNETİCİ & ANALİZ",
+    "⚙️ LİSTELER & AYARLAR",
 ])
+
+ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 
 # --- 1. SEKME: GİRİŞ KALİTE KONTROL ---
 with sekme_giris:
@@ -373,7 +513,7 @@ with sekme_giris:
         genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
         st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
 
-        if st.button("🚀 Verileri Kaydet ve E-Tabloya Gönder", use_container_width=True):
+        if st.button("🚀 Verileri Kaydet ve E-Tabloya Gönder", use_container_width=True, key="btn_gkk_kaydet"):
             if not gkk_urun or not gkk_firma:
                 st.warning("⚠️ Lütfen Gelen Ürün / Parça Adı ve Tedarikçi Firma alanlarını doldurunuz!")
             else:
@@ -403,38 +543,120 @@ with sekme_giris:
                 else:
                     st.error(f"❌ Kayıt gönderilirken hata oluştu: {st.session_state.gkk_hata}")
 
-# --- 2. SEKME: YÖNETİCİ PANELİ & KAYIT YÖNETİMİ ---
+# --- 2. SEKME: CNC SAHA KONTROL ---
+with sekme_cnc:
+    st.header("Saha Kalite Kontrol Formu (CNC)")
+    if st.session_state.mesaj:
+        m_tur, m_metin = st.session_state.mesaj
+        if m_tur == "warning": st.warning(m_metin)
+        elif m_tur == "success": st.success(m_metin)
+        st.session_state.mesaj = None
+
+    fk = st.session_state.form_key
+    personel = st.selectbox("Kalite Personeli", ["-- Seçiniz --"] + ekstra_personeller, key=f"personel_{fk}")
+    parca = st.selectbox("Parça Seçin", options=["-- Seçiniz --"] + ekstra_parcalar, index=0, key=f"parca_{fk}")
+    ret_nedenleri = ["-- Seçiniz --", "OPRT. HATASI", "DÖKÜM HATASI", "TEKNİK HATA", "DİĞER"]
+    ret_nedeni = st.selectbox("RET NEDENİ", ret_nedenleri, key=f"ret_nedeni_{fk}")
+
+    op_adi, cnc_no = "", ""
+    if ret_nedeni == "OPRT. HATASI":
+        op_adi = st.text_input("OPERATÖRÜN ADI", placeholder="Örn: MELİH ÇAKILLI", key=f"op_adi_{fk}")
+        cnc_no = st.text_input("CNC NO", placeholder="Örn: CNC5", key=f"cnc_no_{fk}")
+
+    aciklama = st.text_input("RET AÇIKLAMASI", placeholder="Örn: ÖLÇÜ DÜŞÜK", key=f"aciklama_{fk}")
+    yuklenen_dosyalar = st.file_uploader("📎 BELGE / FOTOĞRAF EKLE", type=["png", "jpg", "jpeg", "pdf"], accept_multiple_files=True, key=f"belgeler_{fk}")
+    ret_miktari = st.number_input("RET ADEDİ", min_value=0, step=1, key=f"ret_miktari_{fk}")
+    uretim_miktari = st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key=f"uretim_miktari_{fk}")
+
+    if st.button("KAYDET VE GÖNDER", use_container_width=True, key="btn_cnc_kaydet"):
+        if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
+            st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
+        else:
+            belge_linkleri = dosyalari_yukle(yuklenen_dosyalar) if yuklenen_dosyalar else []
+            kayit = {
+                "personel": personel, "parca": parca, "ret_nedeni": ret_nedeni,
+                "op_adi": op_adi, "cnc_no": cnc_no, "aciklama": aciklama,
+                "ret_miktari": ret_miktari, "uretim_miktari": uretim_miktari,
+                "belge_linkleri": ", ".join(belge_linkleri) if belge_linkleri else "",
+            }
+            if veri_kaydet(kayit):
+                st.session_state.form_key += 1
+                st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
+                st.rerun()
+
+# --- 3. SEKME: ROTOR & STATOR ---
+with sekme_rotor:
+    st.header("Rotor & Stator Kalite Kontrol")
+    st.info("Bu birim için veri girişi ve form yapısı aktif.")
+
+# --- 4. SEKME: MOTOR MONTAJ ---
+with sekme_montaj:
+    st.header("Motor Montaj & Son Kontrol")
+    st.info("Bu birim için montaj test süreçleri aktif.")
+
+# --- 5. SEKME: POMPA TEST ---
+with sekme_pompa:
+    st.header("Pompa Üretim & Test Kontrol")
+    st.info("Bu birim için basınç ve debi test formları aktif.")
+
+# --- 6. SEKME: YÖNETİCİ & ANALİZ (KAYIT YÖNETİMİ DAHİL) ---
 with sekme_yonetici:
-    st.header("Anlık Kalite Takip ve Kayıt Silme Paneli")
+    st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
     if st.button("🔄 Verileri Yenile", key="btn_yenile_yonetici"):
+        verileri_yukle.clear()
+        ekstra_liste_yukle.clear()
         giris_kalite_yukle.clear()
         st.rerun()
 
-    df_gkk = giris_kalite_yukle()
-    if not df_gkk.empty:
-        st.subheader("🗑️ Hatalı Kayıtları Yönet ve Sil")
-        st.caption("Tablodan silmek istediğiniz kaydı seçip aşağıdaki sil butonuna basabilirsiniz.")
-        
-        secilen_satir = st.selectbox(
-            "Silinecek Kaydı Seçin (Satır Numarası - Zaman - Firma)",
-            options=range(len(df_gkk)),
-            format_func=lambda i: f"Satır {i+1} | Zaman: {df_gkk.iloc[i].values[0]} | Firma/Ürün: {str(df_gkk.iloc[i].values[4]) if len(df_gkk.iloc[i].values) > 4 else '-'}"
-        )
-        
-        if st.button("🔴 Seçilen Kaydı Kalıcı Olarak Sil", use_container_width=True):
-            if kayit_sil(secilen_satir):
-                st.success("✅ Seçilen kayıt başarıyla silindi!")
-                st.rerun()
-            else:
-                st.error("❌ Kayıt silinirken bir hata oluştu!")
+    alt_sekme1, alt_sekme2, alt_sekme3 = st.tabs(["⚙️ SAHA KALİTE ANALİZLERİ", "📦 GİRİŞ KALİTE ANALİZ & RAPOR", "🗑️ KAYIT SİLME VE YÖNETİMİ"])
 
-        st.markdown("---")
-        st.subheader("📊 Canlı Veri Tablosu")
-        st.dataframe(df_gkk, use_container_width=True)
-    else:
-        st.info("Giriş Kalite Kontrol sekmesinde kayıt bulunmuyor.")
+    with alt_sekme1:
+        df = verileri_yukle()
+        if not df.empty:
+            st.metric("Toplam Saha Kaydı", f"{len(df)} Adet")
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("Saha verisi bulunmuyor.")
 
-# --- 3. SEKME: YÖNETİM & AYARLAR ---
+    with alt_sekme2:
+        df_gkk = giris_kalite_yukle()
+        if not df_gkk.empty:
+            st.dataframe(df_gkk, use_container_width=True)
+        else:
+            st.info("Giriş kalite verisi bulunmuyor.")
+
+    with alt_sekme3:
+        st.subheader("🗑️ Hatalı Kayıtları Yönet ve Kalıcı Olarak Sil")
+        st.caption("Giriş kalite kontrol sekmesine yanlış girilen kayıtları seçip buradan silebilirsiniz.")
+        df_gkk_sil = giris_kalite_yukle()
+        if not df_gkk_sil.empty:
+            secilen_satir = st.selectbox(
+                "Silinecek Kaydı Seçin (Satır Numarası - Tarih - Firma)",
+                options=range(len(df_gkk_sil)),
+                format_func=lambda i: f"Satır {i+1} | Tarih: {df_gkk_sil.iloc[i].values[0]} | Firma: {str(df_gkk_sil.iloc[i].values[4]) if len(df_gkk_sil.iloc[i].values) > 4 else '-'}"
+            )
+            if st.button("🔴 Seçilen Kaydı Kalıcı Olarak Sil", use_container_width=True, key="btn_sil_islem"):
+                if kayit_sil(secilen_satir):
+                    st.success("✅ Seçilen kayıt başarıyla silindi!")
+                    st.rerun()
+                else:
+                    st.error("❌ Kayıt silinirken hata oluştu!")
+        else:
+            st.info("Silinecek kayıt bulunmuyor.")
+
+# --- 7. SEKME: LİSTELER & AYARLAR ---
 with sekme_ayarlar:
-    st.header("Sistem ve Liste Yönetimi")
-    st.info("Bu alandan sistem parametrelerini ve dinamik listeleri yönetebilirsiniz.")
+    st.header("Personel ve Parça Listesini Yönet")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        yeni_p = st.text_input("Personel Adı Soyadı", key="yeni_p_input")
+        if st.button("Personel Ekle", key="btn_p_ekle") and yeni_p.strip():
+            if kalici_liste_ekle("PERSONEL", yeni_p.strip()):
+                st.success("✅ Personel eklendi!")
+                st.rerun()
+    with col_p2:
+        yeni_parca = st.text_input("Parça Adı", key="yeni_parca_input")
+        if st.button("Parça Ekle", key="btn_parca_ekle") and yeni_parca.strip():
+            if kalici_liste_ekle("PARCA", yeni_parca.strip()):
+                st.success("✅ Parça eklendi!")
+                st.rerun()
