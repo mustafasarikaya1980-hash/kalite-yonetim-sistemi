@@ -145,24 +145,6 @@ CSV_GIRIS_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby9xKz14pVGDNPDkUlUsztvrOK6WEAUOmbXDWBNcpwL70lcg8QRR1AVwKNEXAEoi40P/exec"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (MSP Kalite Sistemi)"}
-DUSUK_PUAN_ESIGI = 70
-
-ALT_PUANLAR = [
-    ("Paketleme", "Paketleme Puanı", "Paketleme Nedeni"),
-    ("Sevkiyat", "Sevkiyat Puanı", "Sevkiyat Nedeni"),
-    ("Ürün Kalitesi", "Kalite Puanı", "Kalite Nedeni"),
-    ("Etiket", "Etiket Puanı", "Etiket Nedeni"),
-]
-
-ALT_BELGE = {
-    "Paketleme": "Paketleme Belge",
-    "Sevkiyat": "Sevkiyat Belge",
-    "Ürün Kalitesi": "Kalite Belge",
-    "Etiket": "Etiket Belge",
-}
-
-AY_ADLARI = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
-             "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"]
 
 def temiz_ad(metin):
     t = re.sub(r"[^\w\-]+", "-", str(metin).strip(), flags=re.UNICODE).strip("-")
@@ -283,7 +265,6 @@ def giris_kalite_kaydet(gkk_veri: dict) -> bool:
         return False
 
 def kayit_sil(satir_index: int) -> bool:
-    """Yönetici panelinden seçilen satırı Apps Script aracılığıyla siler."""
     try:
         gercek_satir = satir_index + 2
         resp = requests.post(APPS_SCRIPT_URL, json={"islem": "sil", "satir_index": gercek_satir}, headers=_HEADERS, timeout=15)
@@ -296,23 +277,6 @@ def kayit_sil(satir_index: int) -> bool:
     except Exception:
         return False
 
-def puan_metni(seri):
-    sayi = pd.to_numeric(seri, errors="coerce")
-    return [f"{v:g}" if pd.notna(v) else ("" if pd.isna(o) else str(o)) for v, o in zip(sayi, seri)]
-
-def bolum_baslik(metin):
-    st.markdown(
-        f'<div style="border-left: 7px solid #2563EB; padding: 0.15rem 0 0.15rem 0.9rem; margin: 0.4rem 0 0.6rem 0; '
-        f'font-size: 1.7rem; font-weight: 800; color: #0F172A;">{metin}</div>',
-        unsafe_allow_html=True,
-    )
-
-def ayirici():
-    st.markdown(
-        '<hr style="border: none; border-top: 3px solid #CBD5E1; margin: 2rem 0 1.6rem 0;">',
-        unsafe_allow_html=True,
-    )
-
 def kalici_liste_ekle(tip: str, deger: str) -> bool:
     payload = {ENTRY2_TIP: tip, ENTRY2_DEGER: deger, "emailAddress": SABIT_EPOSTA}
     try:
@@ -323,123 +287,6 @@ def kalici_liste_ekle(tip: str, deger: str) -> bool:
         return False
     except Exception:
         return False
-
-BIRIM_SIRASI = ["GIRIS", "CNC", "ROTOR", "MONTAJ", "POMPA"]
-
-BIRIMLER = {
-    "GIRIS": {"baslik": "📦 GİRİŞ KALİTE KONTROL", "ad": "Giriş Kalite Kontrol"},
-    "CNC": {"baslik": "🔧 CNC SAHA KONTROL", "ad": "CNC Saha Kontrol"},
-    "ROTOR": {
-        "baslik": "🧲 ROTOR & STATOR KONTROL",
-        "ad": "Rotor & Stator Kontrol",
-        "listeler": {
-            "PERSONEL": "Kalite Personeli",
-            "MALZEME": "Rotor / Stator Modelleri",
-            "ASAMA": "Kontrol Aşamaları",
-            "HATA": "Hata / Ret Nedenleri",
-        },
-        "varsayilan": {
-            "MALZEME": ["ROTOR", "STATOR"],
-            "ASAMA": ["GELEN MALZEME", "PROSES ARASI", "SON KONTROL"],
-            "HATA": ["SARGI HATASI", "İZOLASYON HATASI", "ÖLÇÜ HATASI", "YÜZEY HATASI", "BALANS HATASI", "DİĞER"],
-        },
-        "alanlar": [
-            {"anahtar": "Rotor / Stator Modeli", "tip": "secim", "liste": "MALZEME", "zorunlu": True},
-            {"anahtar": "Kontrol Aşaması", "tip": "secim", "liste": "ASAMA", "zorunlu": True},
-            {"anahtar": "Hata Nedeni", "tip": "secim", "liste": "HATA"},
-            {"anahtar": "Açıklama", "tip": "metin", "ornek": "Örn: Sargı uç bağlantısı gevşek"},
-            {"anahtar": "Ret Adedi", "tip": "sayi"},
-            {"anahtar": "Kontrol Edilen Adet", "tip": "sayi"},
-        ],
-        "model_alani": "Rotor / Stator Modeli",
-        "ret_alani": "Ret Adedi", "hata_alani": "Hata Nedeni", "adet_alani": "Kontrol Edilen Adet",
-    },
-    "MONTAJ": {
-        "baslik": "⚡ MOTOR MONTAJ & SON KONTROL",
-        "ad": "Motor Montaj & Son Kontrol",
-        "listeler": {
-            "PERSONEL": "Kalite Personeli",
-            "MALZEME": "Motor Modelleri",
-            "KONTROL": "Kontrol Listesi Maddeleri",
-        },
-        "varsayilan": {
-            "MALZEME": ["4\" MOTOR", "6\" MOTOR", "8\" MOTOR"],
-            "KONTROL": ["Sargı direnci", "İzolasyon direnci (megger)", "Yatak / rulman kontrolü", "Mil salgısı",
-                        "Kablo ve bağlantılar", "Etiket ve seri no", "Boya ve görünüm", "Boşta çalışma testi"],
-        },
-        "alanlar": [
-            {"anahtar": "Motor Modeli", "tip": "secim", "liste": "MALZEME", "zorunlu": True},
-            {"anahtar": "Seri No", "tip": "metin", "ornek": "Örn: 26-0458", "zorunlu": True},
-            {"anahtar": "Kontrol Listesi", "tip": "kontrol", "liste": "KONTROL"},
-            {"anahtar": "Açıklama", "tip": "metin", "ornek": "Uygunsuzluk varsa nedenini yazın"},
-        ],
-        "model_alani": "Motor Modeli",
-    },
-    "POMPA": {
-        "baslik": "💧 POMPA ÜRETİM & TEST KONTROL",
-        "ad": "Pompa Üretim & Test Kontrol",
-        "listeler": {
-            "PERSONEL": "Kalite Personeli",
-            "MALZEME": "Pompa Modelleri",
-            "KONTROL": "Kontrol Listesi Maddeleri",
-        },
-        "varsayilan": {
-            "MALZEME": [],
-            "KONTROL": ["Basınç testi", "Debi testi", "Sızdırmazlık", "Gürültü / titreşim", "Akım değeri", "Görünüm ve etiket"],
-        },
-        "alanlar": [
-            {"anahtar": "Pompa Modeli", "tip": "secim", "liste": "MALZEME", "zorunlu": True},
-            {"anahtar": "Seri No", "tip": "metin", "ornek": "Örn: P-26-0012", "zorunlu": True},
-            {"anahtar": "Kontrol Listesi", "tip": "kontrol", "liste": "KONTROL"},
-            {"anahtar": "Basınç (bar)", "tip": "olcum", "ornek": "Örn: 4,5"},
-            {"anahtar": "Debi (m³/h)", "tip": "olcum", "ornek": "Örn: 12,3"},
-            {"anahtar": "Akım (A)", "tip": "olcum", "ornek": "Örn: 6,8"},
-            {"anahtar": "Açıklama", "tip": "metin", "ornek": "Uygunsuzluk varsa nedenini yazın"},
-        ],
-        "model_alani": "Pompa Modeli",
-    },
-}
-
-def apps_script_gonder(payload, zaman_asimi=30):
-    try:
-        resp = requests.post(APPS_SCRIPT_URL, json=payload, headers=_HEADERS, timeout=zaman_asimi)
-        try:
-            sonuc = resp.json()
-        except Exception:
-            return False, f"HTTP {resp.status_code} - Yanıt JSON değil: {resp.text[:300]}"
-        if sonuc.get("success"):
-            return True, None
-        return False, f"Apps Script hatası: {sonuc.get('error')}"
-    except Exception as e:
-        return False, f"Bağlantı hatası: {e}"
-
-@st.cache_data(ttl=10, show_spinner=False)
-def birim_kayitlari_yukle(birim):
-    try:
-        r = requests.get(APPS_SCRIPT_URL, params={"islem": "oku", "birim": birim}, headers=_HEADERS, timeout=30)
-        s = r.json()
-        if s.get("success"):
-            return pd.DataFrame(s.get("rows", []))
-    except Exception:
-        pass
-    return pd.DataFrame()
-
-@st.cache_data(ttl=10, show_spinner=False)
-def birim_listeleri_yukle():
-    sonuc = {}
-    try:
-        r = requests.get(APPS_SCRIPT_URL, params={"islem": "listeler"}, headers=_HEADERS, timeout=30)
-        s = r.json()
-        if s.get("success"):
-            for satir in s.get("rows", []):
-                sonuc.setdefault(satir["Birim"], {}).setdefault(satir["Tip"], []).append(satir["Deger"])
-    except Exception:
-        pass
-    return sonuc
-
-def liste_getir(kod, tip, listeler):
-    cfg = BIRIMLER[kod]
-    return listeler.get(kod, {}).get(tip) or cfg.get("varsayilan", {}).get(tip, [])
 
 # Üst Başlık
 st.markdown(
@@ -452,15 +299,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Ana Sekmeler (Orijinal Düzen)
+# Orijinal Ana Sekme Yapısı
 sekme_giris, sekme_cnc, sekme_rotor, sekme_montaj, sekme_pompa, sekme_yonetici, sekme_ayarlar = st.tabs([
-    "📦 GİRİŞ KALİTE KONTROL",
-    "🔧 CNC SAHA KONTROL",
-    "🧲 ROTOR & STATOR",
-    "⚡ MOTOR MONTAJ",
-    "💧 POMPA TEST",
-    "📊 YÖNETİCİ & ANALİZ",
-    "⚙️ LİSTELER & AYARLAR",
+    "GİRİŞ KALİTE KONTROL",
+    "CNC SAHA KONTROL",
+    "ROTOR & STATOR KONTROL",
+    "MOTOR MONTAJ & SON KONTROL",
+    "POMPA ÜRETİM & TEST KONTROL",
+    "YÖNETİM",
+    "LİSTELER & AYARLAR",
 ])
 
 ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
@@ -584,31 +431,31 @@ with sekme_cnc:
                 st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
                 st.rerun()
 
-# --- 3. SEKME: ROTOR & STATOR ---
+# --- 3. SEKME: ROTOR & STATOR KONTROL ---
 with sekme_rotor:
     st.header("Rotor & Stator Kalite Kontrol")
     st.info("Bu birim için veri girişi ve form yapısı aktif.")
 
-# --- 4. SEKME: MOTOR MONTAJ ---
+# --- 4. SEKME: MOTOR MONTAJ & SON KONTROL ---
 with sekme_montaj:
     st.header("Motor Montaj & Son Kontrol")
     st.info("Bu birim için montaj test süreçleri aktif.")
 
-# --- 5. SEKME: POMPA TEST ---
+# --- 5. SEKME: POMPA ÜRETİM & TEST KONTROL ---
 with sekme_pompa:
     st.header("Pompa Üretim & Test Kontrol")
     st.info("Bu birim için basınç ve debi test formları aktif.")
 
-# --- 6. SEKME: YÖNETİCİ & ANALİZ (KAYIT YÖNETİMİ DAHİL) ---
+# --- 6. SEKME: YÖNETİM (Analiz, Rapor ve Kayıt Silme Paneli) ---
 with sekme_yonetici:
-    st.header("Anlık Kalite Takip ve Canlı Analiz Ekranı")
+    st.header("Anlık Kalite Takip ve Yönetim Paneli")
     if st.button("🔄 Verileri Yenile", key="btn_yenile_yonetici"):
         verileri_yukle.clear()
         ekstra_liste_yukle.clear()
         giris_kalite_yukle.clear()
         st.rerun()
 
-    alt_sekme1, alt_sekme2, alt_sekme3 = st.tabs(["⚙️ SAHA KALİTE ANALİZLERİ", "📦 GİRİŞ KALİTE ANALİZ & RAPOR", "🗑️ KAYIT SİLME VE YÖNETİMİ"])
+    alt_sekme1, alt_sekme2, alt_sekme3 = st.tabs(["📊 Saha Kalite Analizleri", "📈 Giriş Kalite Takip & Analiz", "🗑️ Hatalı Kayıt Silme / Yönetim"])
 
     with alt_sekme1:
         df = verileri_yukle()
@@ -626,12 +473,12 @@ with sekme_yonetici:
             st.info("Giriş kalite verisi bulunmuyor.")
 
     with alt_sekme3:
-        st.subheader("🗑️ Hatalı Kayıtları Yönet ve Kalıcı Olarak Sil")
-        st.caption("Giriş kalite kontrol sekmesine yanlış girilen kayıtları seçip buradan silebilirsiniz.")
+        st.subheader("🗑️ Giriş Kalite Kontrol Kayıtlarını Sil")
+        st.caption("Tablodan silmek istediğiniz hatalı kaydı seçip kalıcı olarak silebilirsiniz.")
         df_gkk_sil = giris_kalite_yukle()
         if not df_gkk_sil.empty:
             secilen_satir = st.selectbox(
-                "Silinecek Kaydı Seçin (Satır Numarası - Tarih - Firma)",
+                "Silinecek Kaydı Seçin",
                 options=range(len(df_gkk_sil)),
                 format_func=lambda i: f"Satır {i+1} | Tarih: {df_gkk_sil.iloc[i].values[0]} | Firma: {str(df_gkk_sil.iloc[i].values[4]) if len(df_gkk_sil.iloc[i].values) > 4 else '-'}"
             )
