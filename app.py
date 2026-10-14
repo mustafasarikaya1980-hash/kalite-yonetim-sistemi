@@ -9,7 +9,8 @@ import altair as alt
 import hashlib
 import hmac
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import uuid
 
 st.set_page_config(page_title="MSP KALİTE YÖNETİM SİSTEMİ", layout="wide", page_icon="🏭")
 
@@ -326,11 +327,11 @@ def veri_kaydet(yeni_veri: dict) -> bool:
     except Exception:
         return False
 
-def giris_kalite_kaydet(gkk_veri: dict) -> bool:
+def giris_kalite_kaydet(gkk_veri: dict, kayit_id=None) -> bool:
     """Giriş kalite kaydını Apps Script'e gönderir. Hata olursa nedenini session_state.gkk_hata içine yazar."""
     st.session_state.gkk_hata = None
     try:
-        resp = requests.post(APPS_SCRIPT_URL, json={"veri": gkk_veri}, headers=_HEADERS, timeout=30)
+        resp = requests.post(APPS_SCRIPT_URL, json={"veri": gkk_veri, "kayit_id": kayit_id}, headers=_HEADERS, timeout=30)
         try:
             sonuc = resp.json()
         except Exception:
@@ -478,6 +479,11 @@ def kullanicilari_al():
         return None
 
 
+def _oturum_olustur(u, kadi):
+    birimler = list(BIRIM_SIRASI) if u["rol"] == "yonetici" else [b for b in u["birimler"] if b in BIRIMLER]
+    return {"kadi": str(kadi).strip().lower(), "ad": u["ad"], "rol": u["rol"], "birimler": birimler}
+
+
 def giris_dogrula(kullanicilar, kadi, sifre):
     u = kullanicilar.get(str(kadi).strip().lower())
     if not u:
@@ -489,8 +495,94 @@ def giris_dogrula(kullanicilar, kadi, sifre):
         dogru = hmac.compare_digest(sifre.encode("utf-8"), u["sifre"].encode("utf-8"))
     if not dogru:
         return None
-    birimler = list(BIRIM_SIRASI) if u["rol"] == "yonetici" else [b for b in u["birimler"] if b in BIRIMLER]
-    return {"kadi": str(kadi).strip().lower(), "ad": u["ad"], "rol": u["rol"], "birimler": birimler}
+    return _oturum_olustur(u, kadi)
+
+
+# --- Sayfa yenilenince oturumun korunması (imzalı çerez) ---
+OTURUM_SURESI_SAAT = 12
+CEREZ_ADI = "msp_oturum"
+
+
+def _imza_anahtari(kullanicilar):
+    ham = islem_anahtari() + "|" + "|".join(f"{k}:{u['sifre']}:{u['sifre_hash']}" for k, u in sorted(kullanicilar.items()))
+    return hashlib.sha256(ham.encode("utf-8")).digest()
+
+
+def oturum_tokeni_uret(kullanicilar, kadi):
+    bitis = int(time.time()) + OTURUM_SURESI_SAAT * 3600
+    yuk = base64.urlsafe_b64encode(f"{kadi}|{bitis}".encode("utf-8")).decode("ascii").rstrip("=")
+    imza = hmac.new(_imza_anahtari(kullanicilar), yuk.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{yuk}.{imza}"
+
+
+def cerezden_oturum(kullanicilar):
+    """Tarayıcıdaki imzalı çerez geçerliyse oturum bilgisini döndürür (şifre değişirse çerez geçersiz olur)."""
+    try:
+        token = st.context.cookies.get(CEREZ_ADI)
+    except Exception:
+        return None
+    if not token or "." not in token:
+        return None
+    try:
+        yuk, imza = token.rsplit(".", 1)
+        beklenen = hmac.new(_imza_anahtari(kullanicilar), yuk.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(imza, beklenen):
+            return None
+        kadi, bitis = base64.urlsafe_b64decode(yuk + "=" * (-len(yuk) % 4)).decode("utf-8").rsplit("|", 1)
+        if int(bitis) < time.time():
+            return None
+        u = kullanicilar.get(kadi)
+        if not u:
+            return None
+        o = _oturum_olustur(u, kadi)
+        if o["birimler"] or o["rol"] == "yonetici":
+            st.session_state.cerez_token = token
+            return o
+    except Exception:
+        return None
+    return None
+
+
+def cerez_yaz(token):
+    st.components.v1.html(
+        f"<script>try{{parent.document.cookie='{CEREZ_ADI}={token}; max-age={OTURUM_SURESI_SAAT * 3600}; path=/; SameSite=Lax; Secure';}}catch(e){{}}</script>",
+        height=0)
+
+
+def cerez_sil():
+    st.components.v1.html(
+        f"<script>try{{parent.document.cookie='{CEREZ_ADI}=; max-age=0; path=/; SameSite=Lax; Secure';}}catch(e){{}}</script>",
+        height=0)
+
+
+# --- Kayıt gönderme: bitti bilgisi ve mükerrer (çift) kayıt engeli ---
+def simdi_str():
+    return (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%H:%M:%S")
+
+
+def form_uid(kimlik):
+    """Her form örneği için benzersiz kayıt kimliği (Apps Script tarafında da çift kaydı engeller)."""
+    return st.session_state.setdefault("form_uidler", {}).setdefault(kimlik, uuid.uuid4().hex)
+
+
+def tek_sefer_gonder(kimlik, gonder_fn, mesaj="⏳ Kaydediliyor... lütfen bekleyin, sayfayı kapatmayın"):
+    """Aynı form örneğini en fazla bir kez gönderir. 'ok' | 'tekrar' | 'hata' döndürür."""
+    kilitler = st.session_state.setdefault("gonderilen_formlar", set())
+    with st.spinner(mesaj):
+        if kimlik in kilitler:
+            return "tekrar"
+        kilitler.add(kimlik)
+        basarili = gonder_fn()
+    if not basarili:
+        kilitler.discard(kimlik)
+        return "hata"
+    return "ok"
+
+
+def kayit_mesaji(durum):
+    if durum == "tekrar":
+        return "ℹ️ Bu kayıt zaten gönderilmişti, ikinci kez KAYDEDİLMEDİ (mükerrer kayıt engellendi)."
+    return f"✅ {simdi_str()} — KAYIT TAMAMLANDI. Form temizlendi, yeni kayıt girebilirsiniz."
 
 
 # ======================================================================
@@ -636,9 +728,6 @@ def genel_form(kod, oturum):
     cfg = BIRIMLER[kod]
     fk = st.session_state.get(f"fk_{kod}", 0)
     mk = f"mesaj_{kod}"
-    if st.session_state.get(mk):
-        st.success(st.session_state[mk])
-        st.session_state[mk] = None
     listeler = birim_listeleri_yukle()
     satir = {}
     uygunsuzlar = []
@@ -700,6 +789,9 @@ def genel_form(kod, oturum):
     dosyalar = st.file_uploader("📎 BELGE / FOTOĞRAF EKLE", type=["png", "jpg", "jpeg", "pdf"],
                                 accept_multiple_files=True, key=f"{kod}_foto_{fk}")
 
+    if st.session_state.get(mk):
+        st.success(st.session_state[mk])
+        st.session_state[mk] = None
     if st.button("KAYDET VE GÖNDER", use_container_width=True, key=f"{kod}_kaydet_{fk}"):
         ret_alani = cfg.get("ret_alani")
         ret = satir.get(ret_alani, 0) if ret_alani else 0
@@ -723,15 +815,23 @@ def genel_form(kod, oturum):
                 st.code(st.session_state.belge_hata)
             return
         satir["Belge Linkleri"] = ", ".join(linkler)
-        ok, hata = apps_script_gonder({"birim_kayit": {"birim": kod, "satir": satir}})
-        if ok:
+        _kimlik = f"{kod}_{fk}"
+        _hata = {}
+
+        def _gonder():
+            ok, hata = apps_script_gonder({"birim_kayit": {"birim": kod, "satir": satir}, "kayit_id": form_uid(_kimlik)})
+            _hata["h"] = hata
+            return ok
+
+        durum = tek_sefer_gonder(_kimlik, _gonder)
+        if durum in ("ok", "tekrar"):
             birim_kayitlari_yukle.clear()
             st.session_state[f"fk_{kod}"] = fk + 1
-            st.session_state[mk] = "✅ Kayıt başarıyla alındı."
+            st.session_state[mk] = kayit_mesaji(durum)
             st.rerun()
         else:
-            st.error("❌ Kayıt gönderilirken bir hata oluştu!")
-            st.code(hata)
+            st.error("❌ Kayıt gönderilirken bir hata oluştu! Kayıt YAPILMADI, tekrar deneyin.")
+            st.code(_hata.get("h"))
 
 
 def genel_rapor(kod, oturum):
@@ -1060,7 +1160,14 @@ if _kullanicilar is None:
     st.error("🔒 Kullanıcı tanımları bulunamadı. Streamlit Cloud → uygulamanız → Settings → Secrets bölümüne kullanıcıları ekleyin (secrets_ornek.toml dosyasındaki gibi).")
     st.stop()
 
+if not st.session_state.oturum and not st.session_state.get("cikis_yapildi"):
+    _co = cerezden_oturum(_kullanicilar)
+    if _co:
+        st.session_state.oturum = _co
+
 if not st.session_state.oturum:
+    if st.session_state.get("cerez_sil"):
+        cerez_sil()
     _s1, _s2, _s3 = st.columns([1, 2, 1])
     with _s2:
         with st.container(border=True):
@@ -1077,6 +1184,9 @@ if not st.session_state.oturum:
                 _sonuc = giris_dogrula(_kullanicilar, _kadi, _sifre)
                 if _sonuc and (_sonuc["birimler"] or _sonuc["rol"] == "yonetici"):
                     st.session_state.oturum = _sonuc
+                    st.session_state.cikis_yapildi = False
+                    st.session_state.cerez_sil = False
+                    st.session_state.cerez_token = oturum_tokeni_uret(_kullanicilar, _sonuc["kadi"])
                     st.rerun()
                 else:
                     time.sleep(1)
@@ -1084,6 +1194,8 @@ if not st.session_state.oturum:
     st.stop()
 
 oturum = st.session_state.oturum
+if st.session_state.get("cerez_token"):
+    cerez_yaz(st.session_state.cerez_token)
 _b1, _b2, _b3 = st.columns([5, 1.3, 1.3])
 _b1.markdown(
     f"👤 **{oturum['ad']}** — {'Kalite Yöneticisi' if oturum['rol'] == 'yonetici' else 'Birim Kalite Personeli'}"
@@ -1094,6 +1206,9 @@ if _b2.button("🔄 Verileri Yenile", use_container_width=True, key="btn_yenile_
     st.rerun()
 if _b3.button("🚪 Çıkış", use_container_width=True, key="btn_cikis"):
     st.session_state.oturum = None
+    st.session_state.cikis_yapildi = True
+    st.session_state.cerez_sil = True
+    st.session_state.cerez_token = None
     st.rerun()
 
 _sekme_listesi = [(b, BIRIMLER[b]["baslik"]) for b in BIRIM_SIRASI if b in oturum["birimler"]]
@@ -1111,10 +1226,6 @@ if "GIRIS" in S:
         with gkk_giris:
                 st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
                 st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri doğrudan Form Yanıtları 7 sekmesine işlenir.")
-
-                if st.session_state.gkk_mesaj:
-                    st.success(st.session_state.gkk_mesaj)
-                    st.session_state.gkk_mesaj = None
 
                 gkk_fk = f"gkk_{st.session_state.form_key}"
 
@@ -1179,6 +1290,9 @@ if "GIRIS" in S:
                     genel_puan = round((p_paket + p_sevkiyat + p_kalite + p_etiket) / 4, 2)
                     st.metric("100 Üzerinden Genel Tedarikçi Puanı", f"{genel_puan}")
 
+                    if st.session_state.gkk_mesaj:
+                        st.success(st.session_state.gkk_mesaj)
+                        st.session_state.gkk_mesaj = None
                     if st.button("🚀 Verileri Kaydet ve E-Tabloya Gönder", use_container_width=True):
                         eksik_nedenler = [ad for ad, p, n in (
                             ("Paketleme", p_paket, n_paket), ("Sevkiyat", p_sevkiyat, n_sevkiyat),
@@ -1226,18 +1340,21 @@ if "GIRIS" in S:
                                 "belge_kalite": belge_linkleri_gkk.get("Ürün Kalitesi", ""),
                                 "belge_etiket": belge_linkleri_gkk.get("Etiket", ""),
                             }
-                            if not yukleme_hatasi and giris_kalite_kaydet(gkk_kayit):
-                                st.session_state.form_key += 1
-                                st.session_state.gkk_mesaj = "✅ Giriş Kalite Kontrol kaydı Form Yanıtları 7 sekmesine başarıyla işlendi!"
-                                st.rerun()
-                            elif yukleme_hatasi:
+                            if yukleme_hatasi:
                                 st.error("❌ Belge yüklenemedi (" + ", ".join(yukleme_hatasi) + "). Kayıt yapılmadı, lütfen tekrar deneyin.")
                                 if st.session_state.belge_hata:
                                     st.code(st.session_state.belge_hata)
                             else:
-                                st.error("❌ Kayıt gönderilirken bir hata oluştu!")
-                                if st.session_state.gkk_hata:
-                                    st.code(st.session_state.gkk_hata)
+                                _kimlik = f"gkk_{st.session_state.form_key}"
+                                _durum = tek_sefer_gonder(_kimlik, lambda: giris_kalite_kaydet(gkk_kayit, kayit_id=form_uid(_kimlik)))
+                                if _durum == "hata":
+                                    st.error("❌ Kayıt gönderilirken bir hata oluştu! Kayıt YAPILMADI, lütfen tekrar deneyin.")
+                                    if st.session_state.gkk_hata:
+                                        st.code(st.session_state.gkk_hata)
+                                else:
+                                    st.session_state.form_key += 1
+                                    st.session_state.gkk_mesaj = kayit_mesaji(_durum)
+                                    st.rerun()
         with gkk_rapor:
                 df_gkk = giris_kalite_yukle()
                 if not df_gkk.empty:
@@ -1346,6 +1463,25 @@ if "GIRIS" in S:
                             stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
                             st.dataframe(stilli, use_container_width=True, hide_index=True)
 
+                            # --- Haftalık raporun altında: kaydı düzelt / sil ---
+                            with st.container(border=True):
+                                bolum_baslik("✏️ Kaydı Düzelt / Sil")
+                                if "_satir" in h_df.columns:
+                                    _etiketler = {}
+                                    for _k in range(len(h_df)):
+                                        _r = h_df.iloc[_k]
+                                        if pd.notna(_r.get("_satir")):
+                                            _etiketler[int(_r["_satir"])] = (
+                                                f"{sub_df['Sıra'].iloc[_k]}  |  {_r[c_tarih]}  |  {_r[c_firma] if c_firma else '-'}  |  "
+                                                f"{_r[c_urun] if c_urun else '-'}  |  Puan: {sub_df['100 ÜZERİNDEN DEĞERLENDİRME'].iloc[_k]}")
+                                    if _etiketler:
+                                        _sec = st.selectbox("Düzeltilecek / silinecek kaydı seçin", list(_etiketler.keys()),
+                                                            format_func=lambda x: _etiketler[x],
+                                                            key=f"gkk_dz_sec_{hafta_secenekleri[secilen_hafta]}")
+                                        satir_butonlari("GKK", "", int(_sec), oturum)
+                                    else:
+                                        st.info("Bu haftada düzenlenecek kayıt yok.")
+
                             # --- Hafta özeti: adet, ortalama, en düşük, en yüksek ---
                             _puanlar = h_df["_p"].dropna()
                             with st.container(border=True):
@@ -1411,9 +1547,6 @@ if "GIRIS" in S:
                                                 f"<div style='background:#F1F5F9;border-left:5px solid #64748B;padding:0.5rem 0.8rem;border-radius:8px;margin-top:0.5rem;color:#1E293B'>"
                                                 f"📝 <b>Ek Açıklama:</b> {_not}</div>",
                                                 unsafe_allow_html=True)
-                                        _sn = satir.get("_satir")
-                                        if pd.notna(_sn):
-                                            satir_butonlari("GKK", "", int(_sn), oturum)
 
                             if not gecersiz_df.empty:
                                 with st.expander("⚠️ Tarihi okunamayan kayıtlar", expanded=False):
@@ -1559,11 +1692,6 @@ if "CNC" in S:
         cnc_giris, cnc_rapor, cnc_liste = st.tabs(["📝 Veri Girişi", "📊 Saha Kalite Analizleri", "⚙️ Listeler"])
         with cnc_giris:
                 st.header("CNC Saha Kalite Kontrol Formu")
-                if st.session_state.mesaj:
-                    m_tur, m_metin = st.session_state.mesaj
-                    if m_tur == "warning": st.warning(m_metin)
-                    elif m_tur == "success": st.success(m_metin)
-                    st.session_state.mesaj = None
 
                 fk = st.session_state.form_key
                 _pl = ["-- Seçiniz --"] + ekstra_personeller
@@ -1583,6 +1711,11 @@ if "CNC" in S:
                 ret_miktari = st.number_input("RET ADEDİ", min_value=0, step=1, key=f"ret_miktari_{fk}")
                 uretim_miktari = st.number_input("Üretim Miktarı (Adet)", min_value=0, step=1, key=f"uretim_miktari_{fk}")
 
+                if st.session_state.mesaj:
+                    m_tur, m_metin = st.session_state.mesaj
+                    if m_tur == "warning": st.warning(m_metin)
+                    elif m_tur == "success": st.success(m_metin)
+                    st.session_state.mesaj = None
                 if st.button("KAYDET VE GÖNDER", use_container_width=True):
                     if personel == "-- Seçiniz --" or parca == "-- Seçiniz --" or ret_nedeni == "-- Seçiniz --":
                         st.warning("⚠️ Lütfen Kalite Personeli, Parça ve Ret Nedeni alanlarını seçiniz!")
@@ -1601,9 +1734,13 @@ if "CNC" in S:
                                 "ret_miktari": ret_miktari, "uretim_miktari": uretim_miktari,
                                 "belge_linkleri": ", ".join(belge_linkleri) if belge_linkleri else "",
                             }
-                            if veri_kaydet(kayit):
+                            _kimlik = f"cnc_{st.session_state.form_key}"
+                            _durum = tek_sefer_gonder(_kimlik, lambda: veri_kaydet(kayit))
+                            if _durum == "hata":
+                                st.error("❌ Kayıt gönderilemedi. Kayıt YAPILMADI, lütfen tekrar deneyin.")
+                            else:
                                 st.session_state.form_key += 1
-                                st.session_state.mesaj = ("success", "✅ Veri Google E-Tablonuza başarıyla kaydedildi!")
+                                st.session_state.mesaj = ("success", kayit_mesaji(_durum))
                                 st.rerun()
         with cnc_rapor:
             df = verileri_yukle()
