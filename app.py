@@ -250,6 +250,7 @@ def verileri_yukle():
 def giris_kalite_yukle():
     try:
         df = pd.read_csv(CSV_GIRIS_URL)
+        df["_satir"] = df.index + 2   # e-tablodaki satır numarası (düzelt / sil için)
         df = df.dropna(how="all")
         # Puan sütunlarında virgüllü ondalıkları (61,5) sayıya çevir
         for c in df.columns:
@@ -733,8 +734,9 @@ def genel_form(kod, oturum):
             st.code(hata)
 
 
-def genel_rapor(kod):
+def genel_rapor(kod, oturum):
     cfg = BIRIMLER[kod]
+    dz_mesaj_goster()
     df = birim_kayitlari_yukle(kod)
     if df.empty:
         st.info("Bu birim için henüz kayıt yok.")
@@ -801,6 +803,9 @@ def genel_rapor(kod):
     bolum_baslik("📋 Kayıtlar")
     model = cfg.get("model_alani", "").lower()
     kayit_tablosu_ve_galeri(d.drop(columns=["_t", "_satir", "_dogrulama"], errors="ignore"), [("zaman",), ("personel",), (model,) if model else ("seri",), ("sonuç",)])
+    ayirici()
+    with st.expander("✏️ Kayıt Düzelt / Sil", expanded=False):
+        kayit_duzenleme("BIRIM", kod, oturum)
 
 
 def liste_yonetimi(kod):
@@ -881,26 +886,118 @@ def kayit_islem_gonder(kaynak, birim, satir, dogrulama, islem, oturum, degerler=
     return ok, hata
 
 
-def kayit_duzenleme(kaynak, birim, oturum):
-    """Yanlış girilen kaydı seçip düzeltme veya silme ekranı. kaynak: GKK | CNC | BIRIM"""
-    kimlik = f"{kaynak}_{birim}"
-    mk = f"dz_mesaj_{kimlik}"
-    sec_key = f"dz_sec_{kimlik}"
-    if st.session_state.get(mk):
-        st.success(st.session_state[mk])
-        st.session_state[mk] = None
-    st.caption("Yanlış girilen kaydı seçip düzeltebilir veya silebilirsiniz. Her işlem e-tablodaki DEGISIKLIK_GUNLUGU sekmesine "
-               "kaydedilir (silinen kaydın eski değerleri dahil).")
+def dz_mesaj_goster():
+    if st.session_state.get("dz_mesaj"):
+        st.success(st.session_state.dz_mesaj)
+        st.session_state.dz_mesaj = None
 
+
+def _duzenleme_kaydi(kaynak, birim, satir):
+    """(df, kayit, kolonlar, dogrulama) döndürür; kayıt bulunamazsa None."""
+    df = birim_kayitlari_yukle(birim) if kaynak == "BIRIM" else duzenleme_verisi(kaynak)
+    if df.empty or "_satir" not in df.columns:
+        return None
+    uygun = df[df["_satir"] == satir]
+    if uygun.empty:
+        return None
+    kayit = uygun.iloc[0]
+    kolonlar = [c for c in df.columns if c not in ("_satir", "_dogrulama")]
+    dogrulama = _s(kayit.get("_dogrulama")) if kaynak == "BIRIM" else _s(kayit[kolonlar[0]]).strip()
+    return df, kayit, kolonlar, dogrulama
+
+
+def duzenleme_formu(kaynak, birim, satir, oturum):
+    """Seçili satırın tüm alanlarını düzenleme formu olarak gösterir."""
+    kimlik = f"{kaynak}_{birim}_{satir}"
+    bulunan = _duzenleme_kaydi(kaynak, birim, satir)
+    if not bulunan:
+        st.warning("Kayıt bulunamadı (silinmiş olabilir). 'Verileri Yenile' düğmesine basın.")
+        return
+    df, kayit, kolonlar, dogrulama = bulunan
+    pozisyon = {c: i for i, c in enumerate(kolonlar)}
+    gorunur = [c for c in kolonlar if any(_s(v).strip() for v in df[c])]
+    with st.form(f"dz_form_{kimlik}"):
+        st.markdown(f"**✏️ Kayıt #{satir} düzenleniyor**")
+        yeni = {}
+        sutunlar = st.columns(2)
+        for n, c in enumerate(gorunur):
+            eski = _s(kayit[c])
+            with sutunlar[n % 2]:
+                if c == kolonlar[0]:
+                    st.text_input(str(c), value=eski, disabled=True, key=f"dz_{kimlik}_{n}")
+                else:
+                    anahtar = f"#{pozisyon[c] + 1}" if kaynak != "BIRIM" else str(c)
+                    yeni[anahtar] = (st.text_input(str(c), value=eski, key=f"dz_{kimlik}_{n}"), eski)
+        k1, k2 = st.columns(2)
+        kaydet = k1.form_submit_button("💾 DEĞİŞİKLİKLERİ KAYDET", use_container_width=True)
+        vazgec = k2.form_submit_button("Vazgeç", use_container_width=True)
+    if vazgec:
+        st.session_state.dz_acik = None
+        st.rerun()
+    if kaydet:
+        degisen = {k: v[0].strip() for k, v in yeni.items() if v[0].strip() != v[1].strip()}
+        if not degisen:
+            st.info("Hiçbir alan değiştirilmedi.")
+            return
+        ok, hata = kayit_islem_gonder(kaynak, birim, satir, dogrulama, "guncelle", oturum, degisen)
+        if ok:
+            st.session_state.dz_mesaj = f"✅ Kayıt #{satir} güncellendi ({len(degisen)} alan)."
+            st.session_state.dz_acik = None
+            st.rerun()
+        else:
+            st.error("❌ Güncellenemedi.")
+            st.code(hata)
+
+
+def silme_paneli(kaynak, birim, satir, oturum):
+    kimlik = f"{kaynak}_{birim}_{satir}"
+    bulunan = _duzenleme_kaydi(kaynak, birim, satir)
+    if not bulunan:
+        st.warning("Kayıt bulunamadı (silinmiş olabilir). 'Verileri Yenile' düğmesine basın.")
+        return
+    dogrulama = bulunan[3]
+    st.warning(f"Kayıt #{satir} kalıcı olarak silinecek. Eski değerleri DEGISIKLIK_GUNLUGU sekmesine yedeklenir. Emin misiniz?")
+    b1, b2, _ = st.columns([1.2, 1, 3])
+    if b1.button("✅ Evet, sil", key=f"dz_evet_{kimlik}", use_container_width=True):
+        ok, hata = kayit_islem_gonder(kaynak, birim, satir, dogrulama, "sil", oturum)
+        if ok:
+            st.session_state.dz_mesaj = f"✅ Kayıt #{satir} silindi."
+            st.session_state.dz_acik = None
+            st.session_state.pop(f"dz_sec_{kaynak}_{birim}", None)
+            st.rerun()
+        else:
+            st.error("❌ Silinemedi.")
+            st.code(hata)
+    if b2.button("Vazgeç", key=f"dz_vazgec_{kimlik}", use_container_width=True):
+        st.session_state.dz_acik = None
+        st.rerun()
+
+
+def satir_butonlari(kaynak, birim, satir, oturum):
+    """Bir kaydın altına ✏️ Düzenle / 🗑️ Sil düğmelerini ve açılan paneli koyar."""
+    kimlik = f"{kaynak}_{birim}_{satir}"
+    c1, c2, _ = st.columns([1, 1, 4])
+    if c1.button("✏️ Düzenle", key=f"dzb_{kimlik}", use_container_width=True):
+        st.session_state.dz_acik = None if st.session_state.get("dz_acik") == ("duzenle", kimlik) else ("duzenle", kimlik)
+    if c2.button("🗑️ Sil", key=f"dsb_{kimlik}", use_container_width=True):
+        st.session_state.dz_acik = None if st.session_state.get("dz_acik") == ("sil", kimlik) else ("sil", kimlik)
+    acik = st.session_state.get("dz_acik")
+    if acik == ("duzenle", kimlik):
+        duzenleme_formu(kaynak, birim, satir, oturum)
+    elif acik == ("sil", kimlik):
+        silme_paneli(kaynak, birim, satir, oturum)
+
+
+def kayit_duzenleme(kaynak, birim, oturum):
+    """Tablo görünümlü raporlar için: kaydı listeden seçip düzelt / sil. kaynak: CNC | BIRIM"""
+    kimlik = f"{kaynak}_{birim}"
+    st.caption("Yanlış girilen kaydı seçip düzeltebilir veya silebilirsiniz. Her işlem e-tablodaki DEGISIKLIK_GUNLUGU sekmesine kaydedilir.")
     df = birim_kayitlari_yukle(birim) if kaynak == "BIRIM" else duzenleme_verisi(kaynak)
     if df.empty or "_satir" not in df.columns:
         st.info("Düzenlenecek kayıt bulunamadı.")
         return
     kolonlar = [c for c in df.columns if c not in ("_satir", "_dogrulama")]
-    pozisyon = {c: i for i, c in enumerate(kolonlar)}
-    gorunur = [c for c in kolonlar if any(_s(v).strip() for v in df[c])]
-
-    ara = st.text_input("🔎 Kayıt ara", placeholder="Firma, ürün, rapor no, personel... yazın", key=f"dz_ara_{kimlik}")
+    ara = st.text_input("🔎 Kayıt ara", placeholder="Personel, parça, ürün... yazın", key=f"dz_ara_{kimlik}")
     d = df
     if ara.strip():
         kucuk = ara.strip().lower()
@@ -923,62 +1020,23 @@ def kayit_duzenleme(kaynak, birim, oturum):
         return f"#{int(r['_satir'])} — " + " | ".join(parcalar)
 
     etiketler = {int(r["_satir"]): etiket(r) for _, r in d.iterrows()}
-    sec = st.selectbox("Düzeltilecek / silinecek kaydı seçin (en yeni üstte, en fazla 100)", list(etiketler.keys()),
-                       format_func=lambda x: etiketler[int(x)], key=sec_key)
-    kayit = df[df["_satir"] == sec].iloc[0]
-    dogrulama = _s(kayit.get("_dogrulama")) if kaynak == "BIRIM" else _s(kayit[kolonlar[0]]).strip()
-
-    bolum_baslik("✏️ Kaydı Düzelt")
-    with st.form(f"dz_form_{kimlik}_{sec}"):
-        yeni = {}
-        sutunlar = st.columns(2)
-        for n, c in enumerate(gorunur):
-            eski = _s(kayit[c])
-            with sutunlar[n % 2]:
-                if c == kolonlar[0]:
-                    st.text_input(str(c), value=eski, disabled=True, key=f"dz_{kimlik}_{sec}_{n}")
-                else:
-                    anahtar = f"#{pozisyon[c] + 1}" if kaynak != "BIRIM" else str(c)
-                    yeni[anahtar] = (st.text_input(str(c), value=eski, key=f"dz_{kimlik}_{sec}_{n}"), eski)
-        kaydet = st.form_submit_button("💾 DEĞİŞİKLİKLERİ KAYDET", use_container_width=True)
-    if kaydet:
-        degisen = {k: v[0].strip() for k, v in yeni.items() if v[0].strip() != v[1].strip()}
-        if not degisen:
-            st.info("Hiçbir alan değiştirilmedi.")
-        else:
-            ok, hata = kayit_islem_gonder(kaynak, birim, sec, dogrulama, "guncelle", oturum, degisen)
-            if ok:
-                st.session_state[mk] = f"✅ Kayıt #{int(sec)} güncellendi ({len(degisen)} alan)."
-                st.rerun()
-            else:
-                st.error("❌ Güncellenemedi.")
-                st.code(hata)
-
+    sec = st.selectbox("Kayıt seçin (en yeni üstte, en fazla 100)", list(etiketler.keys()),
+                       format_func=lambda x: etiketler[int(x)], key=f"dz_sec_{kimlik}")
+    duzenleme_formu(kaynak, birim, int(sec), oturum)
     ayirici()
-    bolum_baslik("🗑️ Kaydı Sil")
-    onay = st.checkbox("Bu kaydı silmek istediğimi onaylıyorum (eski değerleri DEGISIKLIK_GUNLUGU sekmesine yedeklenir).",
-                       key=f"dz_onay_{kimlik}_{sec}")
-    if st.button("🗑️ KAYDI SİL", disabled=not onay, key=f"dz_sil_{kimlik}_{sec}"):
-        ok, hata = kayit_islem_gonder(kaynak, birim, sec, dogrulama, "sil", oturum)
-        if ok:
-            st.session_state[mk] = f"✅ Kayıt #{int(sec)} silindi."
-            st.session_state.pop(sec_key, None)
-            st.rerun()
-        else:
-            st.error("❌ Silinemedi.")
-            st.code(hata)
+    silme_paneli_ac = st.checkbox("🗑️ Bu kaydı silmek istiyorum", key=f"dz_silac_{kimlik}_{sec}")
+    if silme_paneli_ac:
+        silme_paneli(kaynak, birim, int(sec), oturum)
 
 
 def genel_birim(kod, oturum):
     cfg = BIRIMLER[kod]
     st.header(cfg["ad"])
-    t_giris, t_rapor, t_duzelt, t_liste = st.tabs(["📝 Veri Girişi", "📊 Rapor ve Analiz", "✏️ Kayıt Düzelt / Sil", "⚙️ Listeler"])
+    t_giris, t_rapor, t_liste = st.tabs(["📝 Veri Girişi", "📊 Rapor ve Analiz", "⚙️ Listeler"])
     with t_giris:
         genel_form(kod, oturum)
     with t_rapor:
-        genel_rapor(kod)
-    with t_duzelt:
-        kayit_duzenleme("BIRIM", kod, oturum)
+        genel_rapor(kod, oturum)
     with t_liste:
         liste_yonetimi(kod)
 
@@ -1049,7 +1107,7 @@ ekstra_personeller, ekstra_parcalar = ekstra_liste_yukle()
 # ---------------- GİRİŞ KALİTE KONTROL ----------------
 if "GIRIS" in S:
     with S["GIRIS"]:
-        gkk_giris, gkk_rapor, gkk_duzelt = st.tabs(["📝 Veri Girişi", "📊 Takip ve Satınalma Değerlendirme Analizi", "✏️ Kayıt Düzelt / Sil"])
+        gkk_giris, gkk_rapor = st.tabs(["📝 Veri Girişi", "📊 Takip ve Satınalma Değerlendirme Analizi"])
         with gkk_giris:
                 st.markdown("### 🛡️ Giriş Kalite Kontrol Takip ve Form Entegrasyonu")
                 st.caption("Bu panel üzerinden girdiğiniz kalite kontrol verileri doğrudan Form Yanıtları 7 sekmesine işlenir.")
@@ -1226,7 +1284,7 @@ if "GIRIS" in S:
                     if not hafta_secenekleri:
                         st.warning("Tarihi okunabilen kayıt bulunmuyor.")
                         if not gecersiz_df.empty:
-                            st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas"], errors="ignore"), use_container_width=True, hide_index=True)
+                            st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas", "_satir"], errors="ignore"), use_container_width=True, hide_index=True)
                     else:
                         secilen_hafta = st.selectbox("🔎 Hafta seç", list(hafta_secenekleri.keys()), key="hafta_sec")
                         h_df = df_gkk[df_gkk["_hafta_bas"] == hafta_secenekleri[secilen_hafta]]
@@ -1236,6 +1294,7 @@ if "GIRIS" in S:
 
                         # ---------- SOL: seçilen haftanın raporu ----------
                         with col_sol:
+                            dz_mesaj_goster()
                             bolum_baslik("📅 Haftalık Rapor")
                             st.caption(f"{secilen_hafta} — {len(h_df)} giriş kalite. Satır renkleri: KABUL yeşil, ŞARTLI KABUL sarı, RED kırmızı. Puana göre sıralıdır (en yüksek en üstte, en düşük en altta).")
 
@@ -1352,10 +1411,13 @@ if "GIRIS" in S:
                                                 f"<div style='background:#F1F5F9;border-left:5px solid #64748B;padding:0.5rem 0.8rem;border-radius:8px;margin-top:0.5rem;color:#1E293B'>"
                                                 f"📝 <b>Ek Açıklama:</b> {_not}</div>",
                                                 unsafe_allow_html=True)
+                                        _sn = satir.get("_satir")
+                                        if pd.notna(_sn):
+                                            satir_butonlari("GKK", "", int(_sn), oturum)
 
                             if not gecersiz_df.empty:
                                 with st.expander("⚠️ Tarihi okunamayan kayıtlar", expanded=False):
-                                    st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas"], errors="ignore"), use_container_width=True, hide_index=True)
+                                    st.dataframe(gecersiz_df.drop(columns=["_dt", "_hafta", "_hafta_bas", "_satir"], errors="ignore"), use_container_width=True, hide_index=True)
 
                         # ---------- SAĞ: üstte tedarikçi fikstürü, altta aylık grafik ----------
                         with col_sag:
@@ -1491,13 +1553,10 @@ if "GIRIS" in S:
                 else:
                     st.info("Giriş Kalite Kontrol sekmesinde veri bulunmuyor.")
 
-        with gkk_duzelt:
-            kayit_duzenleme("GKK", "", oturum)
-
 # ---------------- CNC SAHA KONTROL ----------------
 if "CNC" in S:
     with S["CNC"]:
-        cnc_giris, cnc_rapor, cnc_duzelt, cnc_liste = st.tabs(["📝 Veri Girişi", "📊 Saha Kalite Analizleri", "✏️ Kayıt Düzelt / Sil", "⚙️ Listeler"])
+        cnc_giris, cnc_rapor, cnc_liste = st.tabs(["📝 Veri Girişi", "📊 Saha Kalite Analizleri", "⚙️ Listeler"])
         with cnc_giris:
                 st.header("CNC Saha Kalite Kontrol Formu")
                 if st.session_state.mesaj:
@@ -1553,8 +1612,9 @@ if "CNC" in S:
                 kayit_tablosu_ve_galeri(df, [("zaman",), ("personel",), ("parça", "parca"), ("ret nedeni",), ("ret aded",)])
             else:
                 st.info("Saha verisi bulunmuyor.")
-        with cnc_duzelt:
-            kayit_duzenleme("CNC", "", oturum)
+            ayirici()
+            with st.expander("✏️ Kayıt Düzelt / Sil", expanded=False):
+                kayit_duzenleme("CNC", "", oturum)
         with cnc_liste:
                 st.header("Personel ve Parça Listesini Yönet")
                 col_p1, col_p2 = st.columns(2)
