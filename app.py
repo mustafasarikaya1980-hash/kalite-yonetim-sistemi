@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+import html
 import os
 import re
 import streamlit as st
@@ -1073,19 +1074,29 @@ def silme_paneli(kaynak, birim, satir, oturum):
         st.rerun()
 
 
-def satir_butonlari(kaynak, birim, satir, oturum):
-    """Bir kaydın altına ✏️ Düzenle / 🗑️ Sil düğmelerini ve açılan paneli koyar."""
+def dz_toggle(tur, kimlik):
+    st.session_state.dz_acik = None if st.session_state.get("dz_acik") == (tur, kimlik) else (tur, kimlik)
+
+
+def satir_ikonlari(kaynak, birim, satir, c_duz, c_sil):
+    """Tablo satırının içine ✏️ (düzenle) ve 🗑️ (sil) küçük düğmelerini koyar."""
     kimlik = f"{kaynak}_{birim}_{satir}"
-    c1, c2, _ = st.columns([1, 1, 4])
-    if c1.button("✏️ Düzenle", key=f"dzb_{kimlik}", use_container_width=True):
-        st.session_state.dz_acik = None if st.session_state.get("dz_acik") == ("duzenle", kimlik) else ("duzenle", kimlik)
-    if c2.button("🗑️ Sil", key=f"dsb_{kimlik}", use_container_width=True):
-        st.session_state.dz_acik = None if st.session_state.get("dz_acik") == ("sil", kimlik) else ("sil", kimlik)
+    if c_duz.button("✏️", key=f"dzb_{kimlik}", help="Düzenle", use_container_width=True):
+        dz_toggle("duzenle", kimlik)
+    if c_sil.button("🗑️", key=f"dsb_{kimlik}", help="Sil", use_container_width=True):
+        dz_toggle("sil", kimlik)
+
+
+def satir_paneli(kaynak, birim, satir, oturum):
+    """Bu satır için düzenleme / silme paneli açıksa, satırın hemen altında gösterir."""
+    kimlik = f"{kaynak}_{birim}_{satir}"
     acik = st.session_state.get("dz_acik")
     if acik == ("duzenle", kimlik):
-        duzenleme_formu(kaynak, birim, satir, oturum)
+        with st.container(border=True):
+            duzenleme_formu(kaynak, birim, satir, oturum)
     elif acik == ("sil", kimlik):
-        silme_paneli(kaynak, birim, satir, oturum)
+        with st.container(border=True):
+            silme_paneli(kaynak, birim, satir, oturum)
 
 
 def kayit_duzenleme(kaynak, birim, oturum):
@@ -1446,41 +1457,42 @@ if "GIRIS" in S:
                             sub_df["100 ÜZERİNDEN DEĞERLENDİRME"] = puan_metni(h_df[c_puan]) if c_puan else "-"
 
 
-                            def _renk_satir(satir, _onay=(h_df[c_onay].astype(str) if c_onay else None)):
-                                if _onay is None:
-                                    return [""] * len(satir)
-                                durum = _onay.iloc[satir.name].strip().upper()
+                            def _satir_renk(durum):
                                 if "ŞARTLI" in durum or "SARTLI" in durum:
-                                    renk = "background-color: #FEF9C3; color: #713F12; font-weight: 600"
-                                elif durum in ("RED", "RET") or durum.startswith("RED") or durum.startswith("RET"):
-                                    renk = "background-color: #FEE2E2; color: #7F1D1D; font-weight: 600"
-                                elif "KABUL" in durum:
-                                    renk = "background-color: #DCFCE7; color: #14532D; font-weight: 600"
-                                else:
-                                    renk = ""
-                                return [renk] * len(satir)
+                                    return "#FEF9C3", "#713F12"
+                                if durum in ("RED", "RET") or durum.startswith("RED") or durum.startswith("RET"):
+                                    return "#FEE2E2", "#7F1D1D"
+                                if "KABUL" in durum:
+                                    return "#DCFCE7", "#14532D"
+                                return "#F8FAFC", "#1E293B"
 
-                            stilli = sub_df.style.apply(_renk_satir, axis=1).set_properties(**{"text-align": "left"})
-                            st.dataframe(stilli, use_container_width=True, hide_index=True)
+                            def _hucre(metin, bg, fg):
+                                return (f"<div style='background:{bg};color:{fg};padding:0.5rem 0.55rem;font-weight:700;font-size:0.92rem;"
+                                        f"border-radius:4px;line-height:1.25;overflow-wrap:anywhere'>{html.escape(str(metin))}</div>")
 
-                            # --- Haftalık raporun altında: kaydı düzelt / sil ---
-                            with st.container(border=True):
-                                bolum_baslik("✏️ Kaydı Düzelt / Sil")
-                                if "_satir" in h_df.columns:
-                                    _etiketler = {}
-                                    for _k in range(len(h_df)):
-                                        _r = h_df.iloc[_k]
-                                        if pd.notna(_r.get("_satir")):
-                                            _etiketler[int(_r["_satir"])] = (
-                                                f"{sub_df['Sıra'].iloc[_k]}  |  {_r[c_tarih]}  |  {_r[c_firma] if c_firma else '-'}  |  "
-                                                f"{_r[c_urun] if c_urun else '-'}  |  Puan: {sub_df['100 ÜZERİNDEN DEĞERLENDİRME'].iloc[_k]}")
-                                    if _etiketler:
-                                        _sec = st.selectbox("Düzeltilecek / silinecek kaydı seçin", list(_etiketler.keys()),
-                                                            format_func=lambda x: _etiketler[x],
-                                                            key=f"gkk_dz_sec_{hafta_secenekleri[secilen_hafta]}")
-                                        satir_butonlari("GKK", "", int(_sec), oturum)
-                                    else:
-                                        st.info("Bu haftada düzenlenecek kayıt yok.")
+                            # Satır içi düğmeli tablo: ✏️ Düzenle ve 🗑️ Sil, "100 üzerinden değerlendirme" sütununun solunda
+                            _oranlar = [0.75, 1.15, 2.5, 1.9, 1.3, 1.5, 0.6, 0.6, 1.1]
+                            _basliklar = ["Sıra", "Tarih / Date", "Gelen Ürün Tipi ve Ölçüsü", "Gelen Ürün Şirket", "RAPOR NO",
+                                          "Onay Durumu", "Düzelt", "Sil", "100 Üzerinden"]
+                            _hb = st.columns(_oranlar)
+                            for _c, _b in zip(_hb, _basliklar):
+                                _c.markdown(f"<div style='font-weight:800;color:#475569;font-size:0.85rem'>{_b}</div>", unsafe_allow_html=True)
+                            for _k in range(len(h_df)):
+                                _r = h_df.iloc[_k]
+                                _durum = str(_r[c_onay]).strip().upper() if c_onay else ""
+                                _bg, _fg = _satir_renk(_durum)
+                                _sn = _r.get("_satir")
+                                _sn = int(_sn) if pd.notna(_sn) else None
+                                _hc = st.columns(_oranlar, vertical_alignment="center")
+                                _vals = [sub_df["Sıra"].iloc[_k], sub_df["Tarih / Date"].iloc[_k], sub_df["Gelen Ürün Tipi ve Ölçüsü"].iloc[_k],
+                                         sub_df["Gelen Ürün Şirket"].iloc[_k], sub_df["RAPOR NO"].iloc[_k], sub_df["Onay Durumu"].iloc[_k]]
+                                for _c, _v in zip(_hc[:6], _vals):
+                                    _c.markdown(_hucre("" if str(_v).lower() == "nan" else _v, _bg, _fg), unsafe_allow_html=True)
+                                if _sn is not None:
+                                    satir_ikonlari("GKK", "", _sn, _hc[6], _hc[7])
+                                _hc[8].markdown(_hucre(sub_df["100 ÜZERİNDEN DEĞERLENDİRME"].iloc[_k], _bg, _fg), unsafe_allow_html=True)
+                                if _sn is not None:
+                                    satir_paneli("GKK", "", _sn, oturum)
 
                             # --- Hafta özeti: adet, ortalama, en düşük, en yüksek ---
                             _puanlar = h_df["_p"].dropna()
